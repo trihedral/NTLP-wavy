@@ -1,0 +1,28 @@
+#!/bin/bash
+
+#$ -M drichte2@nd.edu
+#$ -m n
+#$ -pe mpi-16 128
+#$ -q *@@richter,*@@ivybridge
+#$ -N wav4
+#$ -j y
+
+cd ~/Research/emily/wav4/
+
+module load mvapich2/1.9-intel-14.0-mlx
+module load intel/14.0
+make clean
+make
+
+case=wav4
+time=0000000
+datadir=/scratch365/drichte2/$case
+runout=$case.out.$time
+
+imachine=0
+echo $imachine > ./mach.file
+echo $datadir >> ./mach.file
+
+mpirun -n 128 ./lesmpi.a > /scratch365/drichte2/$case/$runout
+
+
