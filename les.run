@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#$ -M drichte2@nd.edu
+#$ -M EMAIL
 #$ -m n
 #$ -pe mpi-16 64
 #$ -q *@@richter
@@ -15,8 +15,8 @@ case=case1
 time=0000000
 runout=$case.out.$time
 
-datadir=/scratch365/drichte2/NTLP-wavy/$case
-homedir=~/Research/NTLP-wavy/$case
+datadir=/scratch365/NETID/NTLP-wavy/$case
+homedir=~/NTLP-wavy/$case
 
 cd $homedir
 
