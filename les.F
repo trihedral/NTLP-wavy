@@ -4,7 +4,7 @@ c ----------------------------------------------------------------------
       integer :: iti,itmax,imean,ihst,itape
       integer :: itstr,it_his,it_viz,iviz
 
-      integer :: ismlt,ifree,isfc,iradup,
+      integer :: ismlt,ifree,iradup,
      + iupwnd,iskew,ibuoy,ifilt,
      + itcut,isubs,ibrcl,i_move_step,
      + iocean,method,idebug,iz_space,
@@ -33,6 +33,7 @@ c
       real :: Uo,Ttop(nscl),Tbot(nscl),qstar(nscl),tsfcc(nscl)
       real :: ugcont,vgcont,fcor,t00,grav
       real :: zi, zl, xl, yl, zw1, zo
+      integer :: isfc(nscl)
 
 c
 c ------------ leave following definitions as is
@@ -7472,7 +7473,7 @@ c
         enddo
 
 !Set the scalar boundary condition based on isfc:
-! isfc = 0, specified surface heat flux (through wtsfc)
+! isfc = 0, specified surface heat flux (through qstar)
 ! isfc = 1, specified surface temperature (through tsfcc)
 
         do iscl=1,nscl
