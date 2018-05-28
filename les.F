@@ -31,7 +31,7 @@ c
 
       !Boundary conditions and other parameters
       real :: Uo,Ttop(nscl),Tbot(nscl),qstar(nscl),tsfcc(nscl)
-      real :: ugcont,vgcont
+      real :: ugcont,vgcont,fcor,t00,grav
       real :: zi, zl, xl, yl, zw1, zo
 
 c
@@ -145,6 +145,7 @@ c ----------------------------------------------------------------------
       integer,parameter :: rbins=4
       real :: residual(rbins)
       real :: Rep_avg,part_grav,Vpmax
+      real :: vp_init(3),Tp_init
 
       real :: radius,rhop,muf,taup_i
       real :: CpaCpp,Pra
@@ -224,8 +225,8 @@ c ----------------------------------------------------------------------
         type con_d
         sequence
         real ::  vk, vkin, vk74, vk74in, 
-     +           grav, gcp, fcor, fcor_h, pi2,
-     +           batagk, t00, batag, 
+     +           gcp, fcor_h, pi2,
+     +           batagk, batag, 
      +           cdbtm, dtdzf(nscl), dtjump, ugal, divgls,
      +           z1, utausv, dx, dy, dz, 
      +           dt, dt1, dt_new,
@@ -238,8 +239,8 @@ c ----------------------------------------------------------------------
         type(con_d), target :: c_c
         real, pointer ::
      +           vk, vkin, vk74, vk74in, 
-     +           grav, gcp, fcor, fcor_h, pi2,
-     +           batagk, t00, batag,
+     +           gcp, fcor_h, pi2,
+     +           batagk, batag,
      +           cdbtm, dtdzf(:), dtjump, ugal, divgls,
      +           z1, utausv, dx, dy, dz, 
      +           dt, dt1, dt_new,
@@ -257,13 +258,10 @@ c
              vkin   => c_c%vkin
              vk74   => c_c%vk74
              vk74in => c_c%vk74in
-             grav   => c_c%grav
              gcp    => c_c%gcp
-             fcor   => c_c%fcor
              fcor_h => c_c%fcor_h
              pi2    => c_c%pi2
              batagk => c_c%batagk
-             t00    => c_c%t00
              batag  => c_c%batag
              cdbtm  => c_c%cdbtm
              dtdzf  => c_c%dtdzf
@@ -10117,20 +10115,16 @@ c
 c
       pi   = 4.0*atan(1.0)
       pi2  = 2.0*pi
-      grav = 9.81
       bfac = 1.0
       if(ibuoy.eq.0) bfac = 0.
 c
 c -------------------- case specific data
 c
       if(iocean .eq. 1) then
-         t00     = 283.
          t00b    = 5000.0
          cp      = 4.20e03
          gcp     = grav/cp
          batag   = bfac*grav/t00b
-c        fcor    = 0.0
-         fcor    = 1.39e-04
          fcor_h  = 0.0
          vgcont  = 0.
 c        wtsfc(1)=0.00
@@ -10153,18 +10147,15 @@ c
 c ---------- if stretched grid specify location of first point
 c
       else
-         t00     = 273.0
          cp      = 1.e3
          gcp     = grav/cp
          batag   = bfac*grav/t00
-         fcor    = 1.0e-04
          fcor_h  = 0.0
 
 
 c
 c ----------- wind tunnel simulation
 c
-         fcor = 0.0
 c
          wtsfc(1)=qstar(1)
          wtsfc(2)=qstar(2)
@@ -10172,13 +10163,6 @@ c
          dtdzf(1)=0.000
 c        dtdzf(2)=0.000
 c
-c ----------- for initilaization to get turbulence started
-c
-c        batag    = 5.0
-c        t00      = 0.0
-c
-c        wtsfc(1) = 30.0
-c        qstar(1) = wtsfc(1)
 c 
 c ---------- 
 c
@@ -17059,7 +17043,6 @@ c
       ngidx = 1
       
       !For the channel case, set the total number of particles:
-      tnumpart = 100000
       numpart = tnumpart/numprocs
       if (myid==0) then
          numpart = numpart + mod(tnumpart,numprocs)
@@ -17083,7 +17066,7 @@ c
          yv = ran2(iseed)*(ymax-ymin) + ymin
          zv = ran2(iseed)*(zl-0.25) + 0.25
          !zv = 0.3
-         call create_particle((/xv,yv,zv/),(/0.01,0.0,0.0/),300.0,idx,
+         call create_particle((/xv,yv,zv/),vp_init,Tp_init,idx,
      +       z_tank_i(1:nnx),xpart(1:nnx),y2part(1:nnx),zl)
       end do
 
@@ -17113,16 +17096,7 @@ c
       !Also assign the x,y,z max and mins to track particles leaving
       call set_bounds
 
-      radius = 280.0e-6 
-      rhop = 3600.0 !kg/m^3
-      part_grav = 10.33
-      Vpmax = 05.0
-      muf  = 1.0/8000.0 !This is 1/Re assuming Uo = 1, H = 1
       taup_i = 18.0*muf/rhop/(2.0*radius)**2
-
-      !Thermal stuff:
-      CpaCpp = 0.2389
-      Pra = 0.71
 
       if (myid==0) write(*,*) 'Particle radius = ',radius
       if (myid==0) write(*,*) 'Particle density = ',rhop
@@ -18570,6 +18544,10 @@ c
 
       ijpts(1,3) = floor(part%xip(1)/dx) + 1 
       ijpts(2,3) = floor(part%xip(2)/dy) + 1
+
+      if (ijpts(1,3) .le. 0)  then
+      write(*,*) 'PROB:',part%xip(1),part%xip(2),part%xip(3)
+      end if
      
       !Fill in the neighbors:
       ijpts(1,2) = ijpts(1,3)-1
@@ -18815,6 +18793,10 @@ c
      +         i_move_step,method,iz_space,iflat,i3d_surf,i_pm,lpbc,
      +         k_stab,no_pgrad,ispray,iDNS,ifields
 
+      namelist /constants/ grav, t00, fcor, tnumpart,
+     +         radius,rhop,part_grav,Vpmax,muf,CpaCpp,Pra,
+     +         vp_init,Tp_init
+
 
       !params.in contains namelists to read
       !open(12, file="./params.in", status="old")
@@ -18832,6 +18814,9 @@ c
 
       read(12,nml=path_names)
       if (myid==0) print path_names
+
+      read(12,nml=constants)
+      if (myid==0) print constants
 
 
 
