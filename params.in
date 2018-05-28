@@ -35,6 +35,7 @@ ispray = 1
 iDNS = 0
 isfc = 0, 0  !0 sets surface flux (qstar), 1 sets surface condition (tsfcc)
 ifields = 0  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
+ievap = 1
 /
 
 !Grid and domain parameters
@@ -79,17 +80,29 @@ grav = 9.81
 t00 = 273.0 !Reference temp for buoyancy
 fcor = 0.0  !Coriolis parameter
 
-!Particles:
+!Air properties:
+nuf = 0.000125  !Kinematic viscosity of air
+Pra = 0.71 !Prandtl number of air
+Sc = 0.61  !Schmidt number for humidity diffusivity
+Cpa = 1006.0  !J/kg-K
+
+!Particle properties:
 tnumpart = 1e5
-rhop=3600.0  !kg/m^3
-part_grav = 10.33
+rhow=3600.0  !Density of water droplets
+rhoa = 1.0   !Density of air
+part_grav = 0.0, 0.0, 10.33
 Vpmax = 5.0
-muf = 0.000125
-CpaCpp = 0.2389
-Pra = 0.71
+Cpp = 4179.0  !J/kg-K
+Mw = 0.018015  !kg/mol
+Ru = 8.3144
+Ms = 0.05844  !kg/mol: molecular weight of salt
+Sal = 0.0   !Salinity
+Gam = 7.28e-2
+Ion = 2.0
+Os = 1.093
 
 !Particle initial conditions:
-radius = 280.0e-6
+radius_init = 280.0e-6
 Tp_init = 300.0
 vp_init = 0.0, 0.0, 0.0
 
