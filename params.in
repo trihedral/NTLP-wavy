@@ -2,7 +2,7 @@
 !Time step information
 &step_params
 iti=0          !Time step to begin
-itmax=100  !Max number of time steps
+itmax=10000  !Max number of time steps
 imean=100    !Number of time steps between writing mean profiles to output log file
 ihst=10     !Number of time steps between writing profiles to history file
 itape=5000  !Number of time steps before opening new history file and writing full 3D volumes
@@ -33,6 +33,7 @@ k_stab = -1
 no_pgrad = 1
 ispray = 1
 iDNS = 0
+isfc = 0, 0  !0 sets surface flux (qstar), 1 sets surface condition (tsfcc)
 ifields = 0  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 /
 
