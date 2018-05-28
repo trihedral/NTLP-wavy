@@ -1,18 +1,18 @@
 c ----------------------------------------------------------------------
       module pars
 c ----------------------------------------------------------------------
-      integer, parameter :: 
-     +           iti=000000,   itmax=100000,
-     +           imean=100,    ihst=10,   iviz=100,   itape=5000,
-     +           itstr=000001, it_his=000001, it_viz=000001
-      integer, parameter ::
-     +           ismlt=0,    ifree=2,   isfc=0,     iradup=-1,
-     +           iupwnd=1,   iskew=1,   ibuoy=1,    ifilt=0, 
-     +           itcut=1,    isubs=0,   ibrcl=0,    i_move_step=00010,
-     +           iocean=0,   method=3,  idebug=1,   iz_space=5,
-     +           ivis0=0,    ifix_dt=0, new_vis=-1, iflat = 2,
-     +           i3d_surf=3, i_pm = 2,  lpbc = 2,   k_stab = -1,
-     +           no_pgrad = 1,ispray=1, iDNS=0
+      integer :: iti,itmax,imean,ihst,itape
+      integer :: itstr,it_his,it_viz,iviz
+
+      integer :: ismlt,ifree,isfc,iradup,
+     + iupwnd,iskew,ibuoy,ifilt,
+     + itcut,isubs,ibrcl,i_move_step,
+     + iocean,method,idebug,iz_space,
+     + ivis0,ifix_dt,new_vis,iflat,
+     + i3d_surf,i_pm,lpbc,k_stab,
+     + no_pgrad,ispray,iDNS,
+     + ifields
+
 c
 c -------- j_recl = record length in "bytes" for history file
 c          k8     = kind parameter for integers in mpi_io routines
@@ -25,9 +25,15 @@ c        integer, parameter :: j_recl=1, k8=8
 c
 c -------- number of vars, size of problem in (x,y,z), max size, max processors
 c
-         integer, parameter :: nscl = 1, nvar = (4+nscl)
-         integer, parameter :: nxg1  = 128, nyg1  = 256, nzg1  = 128
-         integer, parameter :: maxnx = 128, maxny = 256, maxnz = 128
+         integer, parameter :: nscl = 2, nvar = (4+nscl)
+         integer, parameter :: nxg1  = 128, nyg1  = 128, nzg1  = 128
+         integer, parameter :: maxnx = 128, maxny = 128, maxnz = 128
+
+      !Boundary conditions and other parameters
+      real :: Uo,Ttop(nscl),Tbot(nscl),qstar(nscl),tsfcc(nscl)
+      real :: ugcont,vgcont
+      real :: zi, zl, xl, yl, zw1, zo
+
 c
 c ------------ leave following definitions as is
 c
@@ -100,7 +106,7 @@ c ----------------------------------------------------------------------
       character*80  path_res, path_sav, path_his, path_prt,
      +              path_sav_v, path_sav_c, path_part,
      +              path_sav_p, path_sav_h, path_sav_part,
-     +              path_sav_hp, path_sav_g, path_bndy
+     +              path_sav_hp, path_sav_g, path_bndy,path_ran
       character case_inp*3
       character*80 path_viz_xy, path_viz_xz, path_viz_yz, path_stuf,
      +             path_seed
@@ -217,37 +223,36 @@ c ----------------------------------------------------------------------
         use pars, only : nscl
         type con_d
         sequence
-        real ::  zo, vk, vkin, vk74, vk74in, 
-     +           grav, gcp, fcor, fcor_h, zi, pi2,
-     +           batagk, t00, batag, vgcont, ugcont, 
+        real ::  vk, vkin, vk74, vk74in, 
+     +           grav, gcp, fcor, fcor_h, pi2,
+     +           batagk, t00, batag, 
      +           cdbtm, dtdzf(nscl), dtjump, ugal, divgls,
-     +           z1, zw1, utausv, xl, yl, zl, dx, dy, dz, 
+     +           z1, utausv, dx, dy, dz, 
      +           dt, dt1, dt_new,
      +           fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax,
-     +           time, t_zero, zody, zody74, tsfcc(nscl),
-     +           utau, qstar(nscl), wtsfc(nscl),
+     +           time, t_zero, zody, zody74, 
+     +           utau, wtsfc(nscl),
      +           uusfc, uvsfc, uwsfc, vvsfc, vwsfc, wwsfc, amonin,
-     +           zol, hol, smal_e, sml_eg,drg_x,drg_y,Uo,Ttop,Tbot
+     +           zol, hol, smal_e, sml_eg,drg_x,drg_y
         end type con_d
         type(con_d), target :: c_c
         real, pointer ::
-     +           zo, vk, vkin, vk74, vk74in, 
-     +           grav, gcp, fcor, fcor_h, zi, pi2,
-     +           batagk, t00, batag, vgcont, ugcont,
+     +           vk, vkin, vk74, vk74in, 
+     +           grav, gcp, fcor, fcor_h, pi2,
+     +           batagk, t00, batag,
      +           cdbtm, dtdzf(:), dtjump, ugal, divgls,
-     +           z1, zw1, utausv, xl, yl, zl, dx, dy, dz, 
+     +           z1, utausv, dx, dy, dz, 
      +           dt, dt1, dt_new,
      +           fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax, 
-     +           time, t_zero, zody, zody74, tsfcc(:),
-     +           utau, qstar(:), wtsfc(:), 
+     +           time, t_zero, zody, zody74, 
+     +           utau, wtsfc(:), 
      +           uusfc, uvsfc, uwsfc, vvsfc, vwsfc, wwsfc, amonin,
-     +           zol, hol, smal_e, sml_eg,drg_x,drg_y,Uo,Ttop,Tbot
+     +           zol, hol, smal_e, sml_eg,drg_x,drg_y
       contains
          subroutine fill_cc
 c
 c --------------- pointer associations for constant variables
 c
-             zo     => c_c%zo
              vk     => c_c%vk 
              vkin   => c_c%vkin
              vk74   => c_c%vk74
@@ -256,24 +261,17 @@ c
              gcp    => c_c%gcp
              fcor   => c_c%fcor
              fcor_h => c_c%fcor_h
-             zi     => c_c%zi
              pi2    => c_c%pi2
              batagk => c_c%batagk
              t00    => c_c%t00
              batag  => c_c%batag
-             vgcont => c_c%vgcont
-             ugcont => c_c%ugcont
              cdbtm  => c_c%cdbtm
              dtdzf  => c_c%dtdzf
              dtjump => c_c%dtjump
              ugal   => c_c%ugal
              divgls => c_c%divgls
              z1     => c_c%z1
-             zw1    => c_c%zw1
              utausv => c_c%utausv
-             xl     => c_c%xl
-             yl     => c_c%yl
-             zl     => c_c%zl
              dx     => c_c%dx
              dy     => c_c%dy
              dz     => c_c%dz
@@ -291,9 +289,7 @@ c
              t_zero => c_c%t_zero
              zody   => c_c%zody
              zody74 => c_c%zody74
-             tsfcc  => c_c%tsfcc
              utau   => c_c%utau
-             qstar  => c_c%qstar
              wtsfc  => c_c%wtsfc
              uusfc  => c_c%uusfc
              uvsfc  => c_c%uvsfc
@@ -308,9 +304,6 @@ c
              sml_eg => c_c%sml_eg
              drg_x  => c_c%drg_x 
              drg_y  => c_c%drg_y 
-             Uo     => c_c%Uo
-             Ttop   => c_c%Ttop
-             Tbot   => c_c%Tbot
          return
          end subroutine fill_cc
       end module con_data
@@ -612,12 +605,14 @@ c
       if(idebug .eq. 1) l_debug = .true.
 c
       ts_mpi = mpi_wtime()
+
+      !Read the input file for all parameters
+      call read_input_file
+
 c
 c -------- set number of x-y slab cpus
 c
-      ncpu_s = 8
 c
-      itn = 000
       case_inp = 'wav'
 c
       call get_units
@@ -646,10 +641,13 @@ c
          if(iocean .eq. 1) then
             call randoc
          else
-c           call random_f
-            call get_fields
-            !call random
-            !call random_wt
+            if (ifields .eq. 1) then
+               call get_fields
+            else
+               call random
+               !call random_f
+               !call random_wt
+            end if
          endif
          !if (iDNS .eq. 1) call dns_vis
          call dns_vis
@@ -1108,10 +1106,6 @@ c        smal_e = 6.0e-03
 c        smal_e = 0.0
       endif
 c
-c ----------- non-dimensional pressure gradient
-c             assumes box height = wavelength 
-c
-      dpdx_con = 1.0
 c
 c ---------------------- set constants in eddy viscosity model
 c
@@ -1291,12 +1285,6 @@ c     path_seed --- seed name
 c
       use pars
 c
-c ---------------- typical garnet paths
-c
-      path_seed   = '/scratch365/drichte2/wav4/'
-c
-      path_res    = '/scratch365/drichte2/wav4/u.le.wav010'
-      path_part   = '/scratch365/drichte2/wav4/part.le.wav010'
 c
 c --------- initialization
 c
@@ -6873,7 +6861,7 @@ c
             do j=iys,iye
             do i=1,nnx
                if (isfc==1) then
-                  tbc(i,j,iscl,2) = 2.0*Tbot - t(i,j,iscl,k)
+                  tbc(i,j,iscl,2) = 2.0*Tbot(iscl) - t(i,j,iscl,k)
                end if
                if (isfc==0) then
                   tbc(i,j,iscl,2) = t(i,j,iscl,k) + 
@@ -7493,7 +7481,7 @@ c
            do iy=iys,iye
            do ix=1,nnx
               if (isfc==1) then
-              tbc(ix,iy,iscl,1) = 2.0*Ttop-t(ix,iy,iscl,iz)
+              tbc(ix,iy,iscl,1) = 2.0*Ttop(iscl)-t(ix,iy,iscl,iz)
               end if
               if (isfc==0) then
               tbc(ix,iy,iscl,1) = t(ix,iy,iscl,iz) + 
@@ -10144,7 +10132,6 @@ c
 c        fcor    = 0.0
          fcor    = 1.39e-04
          fcor_h  = 0.0
-         ugcont  = 0.0
          vgcont  = 0.
 c        wtsfc(1)=0.00
 c        wtsfc(1)=4.96e-07
@@ -10165,7 +10152,6 @@ c        izi     = nnz
 c
 c ---------- if stretched grid specify location of first point
 c
-         zw1 = -0.5
       else
          t00     = 273.0
          cp      = 1.e3
@@ -10174,23 +10160,15 @@ c
          fcor    = 1.0e-04
          fcor_h  = 0.0
 
-         Uo = 1.0
-         Ttop = 295.00
-         Tbot = 300.00
 
 c
 c ----------- wind tunnel simulation
 c
          fcor = 0.0
 c
-         wtsfc(1)=0.000
-c        wtsfc(1)=-0.010
-c        wtsfc(2)=0.00
+         wtsfc(1)=qstar(1)
+         wtsfc(2)=qstar(2)
 c
-         qstar(1)=wtsfc(1)
-c        qstar(2)=wtsfc(2)
-c
-c        dtdzf(1)=0.003
          dtdzf(1)=0.000
 c        dtdzf(2)=0.000
 c
@@ -10206,42 +10184,7 @@ c ----------
 c
          dtjump  = 0.0
          divgls  = 0.0
-c
-         ugcont  = Uo
-         vgcont  = 0.0
-c
-         zi      = 1.0
-c
-c --------- wave length for no breaker case and case with no drift
-c
-c         x_wave  = 0.232780E+02*0.01
-c
-c --------- wave length for breaker case
-c
-c        x_wave  = 0.235351E+02*0.01
-c
-c --------- wave length for tetsu's monochromatic case like no breaker
-c           no drift
-c
-c        x_wave  = 0.232780E+02*0.01
-c
-c --------- wave length for Sullivan et al. (2000)
 
-         x_wave  = 1.0
-
-c -------- surface roughness made dimensionless by wavelength
-c          see i_tank setup for cases
-c
-         zo      = 10.0e-05/x_wave
-         xl      = 6.0
-         yl      = 5.0
-         zl      = 1.0
-c
-c ---------- if stretched grid specify location of first point
-c
-         zw1     = 0.0042
-c
-c        zw1     = 0.010
 c
 c        izi     = int(float(nnz)*zi/zl)
 c        izi     = (60*nnz)/100
@@ -10365,10 +10308,6 @@ c        utau  = vk*(ufree)/zody
       vwsfc = -utau*utau
 c
 c ------- make sure tsfcc is gt than t00 for both isfc=0 or 1
-c
-c     tsfcc(1) = t00+qstar(1)/utau*zody*vk74in
-      tsfcc(1) = 300.0
-c     tsfcc(2) = 1.0
 c
       if(l_root) then
          write(6,80)
@@ -13650,14 +13589,11 @@ c
       integer(kind=mpi_offset_kind) :: offset, disp
       integer(kind=k8)              :: nsize, nsize2
       real, allocatable, dimension(:,:,:) :: temp
-      character*80 path_ran
       logical there
 c
       allocate(temp(nvar+4,nnx,iys:iye))
 c
 c ---------- input file to read from
-c
-      path_ran = '/scratch365/drichte2/wav4/u.le.wav000'
 c
 c --------------------- get restart file from local directory
 c                       reuse unit number
@@ -14928,7 +14864,7 @@ c
       call fill_cc
       call fill_cs
 c
-      write(6,5001) isize
+      if (myid==0) write(6,5001) isize
  5001 format(' size of stats array = ',i8)
 c
 c ---------------- debug for arrays
@@ -17392,12 +17328,12 @@ c
       xmax = dx*(mxe)
 
       end subroutine set_bounds
-      subroutine create_particle(xp,vp,Tp,idx,ztank,xles,y2,zl)
+      subroutine create_particle(xp,vp,Tp,idx,ztank,xles,y2)
       use particles
       use pars
       implicit none
 
-      real :: xp(3),vp(3),Tp,hpart,zl
+      real :: xp(3),vp(3),Tp,hpart
       real :: ztank(nnx),xles(nnx),y2(nnx)
       integer :: idx,ix
 
@@ -17846,6 +17782,7 @@ c
       subroutine particle_bcs_nonperiodic
       use particles
       use con_data
+      use pars
       implicit none
       real :: top,bot
 
@@ -17928,7 +17865,7 @@ c
         zv = 10.0*radius
         !zv = zw1
         call create_particle((/xv,yv,zv/),(/0.0,0.0,vinj/),300.0,2,
-     +       z_tank_i(1:nnx),xpart(1:nnx),y2part(1:nnx),zl)
+     +       z_tank_i(1:nnx),xpart(1:nnx),y2part(1:nnx))
 
        end if
       end do
@@ -17937,6 +17874,7 @@ c
       subroutine particle_bcs_periodic
       use particles
       use con_data
+      use pars
       implicit none 
 
       !Assumes domain goes from [0,xl),[0,yl),[0,zl] 
@@ -18676,7 +18614,7 @@ c
 
       !Fill in the weights:
       !First for x and y since they are periodic:
-      wt(1:4,1:6) = 0.0
+      wt(1:3,1:6) = 0.0
       dxvec(1) = dx
       dxvec(2) = dy
       do iz = 1,2
@@ -18852,3 +18790,49 @@ c
       ran2=min(AM*iy,RNMX)
       return
       end function ran2
+
+      subroutine read_input_file
+      use pars
+      use particles
+      use con_data
+      implicit none
+
+      character(48) :: label
+      character(180) :: params_dir
+      namelist /step_params/ iti,itmax,imean,ihst,itape,
+     +                       itstr,it_his,it_viz,iviz,itn
+
+      namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
+     +         qstar, tsfcc, ugcont, vgcont,
+     +         zi, zl, xl, yl, zw1, dpdx_con,
+     +         zo
+
+      namelist /path_names/ path_seed,path_part,path_res,
+     +         path_ran
+
+      namelist /flags/ iradup,ifilt,itcut,isubs,ibrcl,iocean,idebug,
+     +         ivis0,new_vis,ismlt,ifree,iupwnd,iskew,ibuoy,ifix_dt,
+     +         i_move_step,method,iz_space,iflat,i3d_surf,i_pm,lpbc,
+     +         k_stab,no_pgrad,ispray,iDNS,ifields
+
+
+      !params.in contains namelists to read
+      !open(12, file="./params.in", status="old")
+      call get_command_argument(1,params_dir)
+      open(12,file=params_dir,status="old")
+
+      read(12,nml=step_params)
+      if (myid==0) print step_params
+
+      read(12,nml=flags)
+      if (myid==0) print flags
+
+      read(12,nml=grid_params)
+      if (myid==0) print grid_params
+
+      read(12,nml=path_names)
+      if (myid==0) print path_names
+
+
+
+      end subroutine read_input_file

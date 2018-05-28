@@ -2,27 +2,27 @@
 
 #$ -M drichte2@nd.edu
 #$ -m n
-#$ -pe mpi-16 128
-#$ -q *@@richter,*@@ivybridge
-#$ -N wav4
+#$ -pe mpi-16 64
+#$ -q *@@richter
+#$ -N case1
 #$ -j y
 
-cd ~/Research/emily/wav4/
 
-module load mvapich2/1.9-intel-14.0-mlx
-module load intel/14.0
-make clean
-make
+module load mvapich2
+module load intel
 
-case=wav4
+case=case1
 time=0000000
-datadir=/scratch365/drichte2/$case
 runout=$case.out.$time
+
+datadir=/scratch365/drichte2/NTLP-wavy/$case
+homedir=~/Research/NTLP-wavy/$case
+
+cd $homedir
 
 imachine=0
 echo $imachine > ./mach.file
 echo $datadir >> ./mach.file
 
-mpirun -n 128 ./lesmpi.a > /scratch365/drichte2/$case/$runout
-
+mpirun -n 64 $homedir/../build/lesmpi.a $homedir/params.in > $datadir/$runout
 
