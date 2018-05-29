@@ -30,7 +30,7 @@ c
          integer, parameter :: maxnx = 128, maxny = 128, maxnz = 128
 
       !Boundary conditions and other parameters
-      real :: Uo,Ttop(nscl),Tbot(nscl),qstar(nscl),tsfcc(nscl)
+      real :: Uo,Ttop(nscl),Tbot(nscl),qstar(nscl),tsfcc(nscl),RHbot
       real :: ugcont,vgcont,fcor,t00,grav
       real :: zi, zl, xl, yl, zw1, zo
       integer :: isfc(nscl)
@@ -130,6 +130,7 @@ c ----------------------------------------------------------------------
       real, allocatable :: uext(:,:,:), vext(:,:,:), wext(:,:,:)
       real, allocatable :: u_t(:,:,:), v_t(:,:,:), w_t(:,:,:)
       real, allocatable :: Text(:,:,:),T_t(:,:,:)
+      real, allocatable :: T2ext(:,:,:),T2_t(:,:,:)
       real, allocatable :: partTsrc(:,:,:),partTsrc_t(:,:,:)
       real, allocatable :: partcount_t(:,:,:),partsrc_t(:,:,:,:)
       real, allocatable :: vpsum_t(:,:,:,:),vpsqrsum_t(:,:,:,:)
@@ -688,6 +689,8 @@ c
       write(*,'(a4,4e15.6)') 'uf1:',time,part%uf(1:3)
       write(*,'(a4,2e15.6)') 'Tp1:',time,part%Tp
       write(*,'(a4,2e15.6)') 'Tf1:',time,part%Tf
+      write(*,'(a4,2e15.6)') 'qf1:',time,part%qinf
+      write(*,'(a5,2e15.6)') 'rad1:',time,part%radius
       end if
       part => part%next
       if (it == 1) numpart = numpart + 1
@@ -1573,14 +1576,14 @@ c
       use con_data
       use con_stats
 c
-      if(isfc(1) .eq. 0) then ! given qstar compute surface temp
-      write(nprt,2000) qstar(1)
- 2000 format(' 2000 in set_lower_bc: qstar = ',e15.6)
+      do iscl = 1,nscl
+
+      if(isfc(iscl) .eq. 0) then ! given qstar compute surface temp
 c
       do j=iys,iye
       do i=1,nnx
-         t3tbc(i,j,1)  = qstar(1)
-         t_grnd(i,j,1) = tsfcc(1)
+         t3tbc(i,j,iscl)  = qstar(iscl)
+         t_grnd(i,j,iscl) = tsfcc(iscl)
       enddo
       enddo
 c
@@ -1588,12 +1591,14 @@ c
 c
       do j=iys,iye
       do i=1,nnx
-         t3tbc(i,j,1)  = -99999.0
-         t_grnd(i,j,1) = tsfcc(1)
+         t3tbc(i,j,iscl)  = -99999.0
+         t_grnd(i,j,iscl) = tsfcc(iscl)
       enddo
       enddo
 c
       endif
+
+      end do
 c
       return
       end
@@ -6526,6 +6531,7 @@ c        t_grnd(i,j,1) = -999999.99
       enddo
       enddo
 c
+      
       call drglaw_l(u_level1,mvar,it)
 c
 c     j = iys
@@ -7050,7 +7056,7 @@ c
          call mo(ibuoy,isfc,ismlt,vk,batag,zody,z1b(i,j),
      +           wind(i,j), ustar(i,j), nscl,
      +           tlv1(1), tsurf(1), qflux(1),
-     +           zol, cd, ch, amol(i,j))
+     +           zol, cd, ch, amol(i,j),RHbot)
 c
 c ------------ build the momentum fluxes
 c
@@ -7078,7 +7084,8 @@ c
       end
       subroutine mo(ibuoy,isfc,ismlt,vk,batag,zody,z1,
      +              wind,utau,nscl,t1xy,tsfcc,qstar,
-     +              zeta,cd,ch,amonin)
+     +              zeta,cd,ch,amonin,RHbot)
+      use particles
 c
 c ---------- routine to find surface fluxes and values
 c            using MO theory. Iterate for z/L
@@ -7096,6 +7103,7 @@ c
       parameter (wind_min = 0.00001)
       real t1xy(nscl), tsfcc(nscl), qstar(nscl)
       integer isfc(nscl)
+      real botC,RHB,RHbot
 c
 
       if(ismlt .eq. 1) then
@@ -7148,6 +7156,7 @@ c
           zeta     = 0.0
           utau     = windm*vk/zody
           tsfcc(1) = t1xy(1)
+          dnom = zody*vk74in
       else
          dnom      = amax1((zody-psis),0.01)*vk74in
          utau      = windm*vk/(zody-psim)
@@ -7168,19 +7177,28 @@ c
         ch = qstar(1)/dnom_ch
       endif
 
-      if (isfc(2) == 0) then
-         tsfcc(2) = t1xy(2) - qstar(2)*(t1xy(1) - tsfcc(1))/qstar(1)
-      end if
+      !Do the lower BC for RH:
 
-      if (isfc(2) == 1) then
-         qstar(2) = qstar(1)*(t1xy(2) - tsfcc(2))/(t1xy(1) - tsfcc(1))
+      if (isfc(2) == 0) then  !Set surface flux, solve for tsfcc
+         thstar = -qstar(2)/utau
+         tsfcc(2) = t1xy(2) - thstar*dnom
+      elseif (isfc(2) == 1) then !Set tsfcc, solve for qstar
+         botC=(tsfcc(1)-273.15)
+         RHB = RHbot/100.0
+         tsfcc(2) =  RHB*Mw/Ru/tsfcc(1)*610.94*
+     +               EXP(17.6257*botC/(botC+243.04))/rhoa
+        
+         thstar = (t1xy(2) - tsfcc(2))/dnom
+         qstar(2) = -utau*thstar
       end if
+         
 c
 c ------ example of other scalars (specified surface value and source)
 c
 c     qstar(2) = qstar(1)*(t1xy(2) - tsfcc(2))/(t1xy(1) - tsfcc(1))
 c
 c     tsfcc(2) = t1xy(2) - qstar(2)*(t1xy(1) - tsfcc(1))/qstar(1)
+
 c
       return
       end
@@ -10130,10 +10148,14 @@ c
       subroutine init
 c
       use pars
+      use particles
       use fields
       use con_data
       use con_stats
 c
+
+      real :: RHT,RHB,topC,botC
+
       pi   = 4.0*atan(1.0)
       pi2  = 2.0*pi
       bfac = 1.0
@@ -10178,11 +10200,22 @@ c
 c ----------- wind tunnel simulation
 c
 c
+
+         !Convert RH at bottom (given by scalar (2)) to specific humidity:
+         RHbot = tsfcc(2)  !Store the RH for use later
+         botC=(tsfcc(1)-273.15)
+         RHB = tsfcc(2)/100.0
+
+         tsfcc(2) =  RHB*Mw/Ru/tsfcc(1)*610.94*
+     +               EXP(17.6257*botC/(botC+243.04))/rhoa
+
+
+
          wtsfc(1)=qstar(1)
          wtsfc(2)=qstar(2)
 c
          dtdzf(1)=0.000
-c        dtdzf(2)=0.000
+         dtdzf(2)=0.000
 c
 c 
 c ---------- 
@@ -12822,12 +12855,14 @@ c           u(ix,iy,iz) = ug(iz) - ugal
          enddo
          do iy=iys,iye
          do ix=1,nnx
-            if(zgrid_w(ix,iy,iz,1) .le. z_lower) then
-              t(ix,iy,1,iz) = t_lower
-            else
-              t(ix,iy,1,iz) = t_lower + 
-     +                        (zgrid_u(ix,iy,iz+1) - z_lower)*dtdzf(1)
-            endif
+!            if(zgrid_w(ix,iy,iz,1) .le. z_lower) then
+!              t(ix,iy,1,iz) = t_lower
+!            else
+!              t(ix,iy,1,iz) = t_lower + 
+!     +                        (zgrid_u(ix,iy,iz+1) - z_lower)*dtdzf(1)
+!            endif
+             t(ix,iy,1,iz) = 299.0
+             t(ix,iy,2,iz) = 0.0
          enddo
          enddo
          do iy=iys,iye
@@ -14123,14 +14158,14 @@ c
 c
 c --------------- output additional scalars
 c
-c     if(nscl .eq. 2) then
-c     write(lu,5005)tsfcc(2),wtsfc(2)
-c5005 format(/,'  SURFACE VALUE: TXYM(2) =',e15.6,' WTSFC(2) = ',e15.6)
-c     write(lu,5100) (iz,txym(iz,2),wtle(iz,2),
-c    +              wtsb(iz,2),iz=iz_strt,iz_end)
-c5100 format(//,' IZ',5x,' SCALAR-1 MEAN',8x,' WS1LE',10x,
-c    +          ' WS1SB',10x
-c    +       ,/,(1x,i4,3(3x,e13.6)))
+      if(nscl .eq. 2) then
+      write(lu,5005)tsfcc(2),wtsfc(2)
+ 5005 format(/,'  SURFACE VALUE: TXYM(2) =',e15.6,' WTSFC(2) = ',e15.6)
+      write(lu,5100) (iz,txym(iz,2),wtle(iz,2),
+     +              wtsb(iz,2),iz=iz_strt,iz_end)
+ 5100 format(//,' IZ',5x,' SCALAR-1 MEAN',8x,' WS1LE',10x,
+     +          ' WS1SB',10x
+     +       ,/,(1x,i4,3(3x,e13.6)))
 c     else if (nscl .eq. 3) then
 c     write(lu,5205)tsfcc(2),wtsfc(2),tsfcc(3),wtsfc(3)
 c5205 format(/,'  SURFACE VALUE: TXYM(2) =',e15.6,' WTSFC(2) = ',e15.6,
@@ -14140,7 +14175,7 @@ c    +    wtsb(iz,2),wtle(iz,3),wtsb(iz,3),iz=iz_strt,iz_end)
 c5200 format(//,' IZ',5x,' SCALAR-1 MEAN',8x,' SCALAR-2 MEAN',10x,
 c    +          ' WS1LE',10x,' WS1SB',10x,' WS2LE',10x,' WS1SB'
 c    +       ,/,(1x,i4,6(3x,e13.6)))
-c     endif
+      endif
 c
       return
       end
@@ -14986,12 +15021,14 @@ c
       allocate(uext(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3), 
      +         vext(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3), 
      +         wext(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3),
-     +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3)) 
+     +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3), 
+     +         T2ext(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3)) 
       !Transposed velocities to do the uf interpolation:
       allocate(u_t(0:nnz+1,iys:iye,mxs:mxe),
      +         v_t(0:nnz+1,iys:iye,mxs:mxe),
      +         w_t(0:nnz+1,iys:iye,mxs:mxe),
-     +         T_t(0:nnz+1,iys:iye,mxs:mxe))
+     +         T_t(0:nnz+1,iys:iye,mxs:mxe),
+     +         T2_t(0:nnz+1,iys:iye,mxs:mxe))
       end if
       !Keep track of particle counts at each node (its surrounding volume)
       !NOTE: allocate even if ispray == 0, since it's in xy_stats
@@ -18342,16 +18379,16 @@ c
       !preceding letter: r=right,l=left,t=top,b=bot.
       !_s: buf of things to send TO r,l,t,b
       !_r: buf of things to recv FROM r,l,t,b 
-      real :: tbuf_s(nnz+2,iye-iys+1,2,4),tbuf_r(nnz+2,iye-iys+1,3,4)
-      real :: bbuf_s(nnz+2,iye-iys+1,3,4),bbuf_r(nnz+2,iye-iys+1,2,4)
-      real :: rbuf_s(nnz+2,2,mxe-mxs+1,4),rbuf_r(nnz+2,3,mxe-mxs+1,4)
-      real :: lbuf_s(nnz+2,3,mxe-mxs+1,4),lbuf_r(nnz+2,2,mxe-mxs+1,4)
+      real :: tbuf_s(nnz+2,iye-iys+1,2,5),tbuf_r(nnz+2,iye-iys+1,3,5)
+      real :: bbuf_s(nnz+2,iye-iys+1,3,5),bbuf_r(nnz+2,iye-iys+1,2,5)
+      real :: rbuf_s(nnz+2,2,mxe-mxs+1,5),rbuf_r(nnz+2,3,mxe-mxs+1,5)
+      real :: lbuf_s(nnz+2,3,mxe-mxs+1,5),lbuf_r(nnz+2,2,mxe-mxs+1,5)
 
       !Corners:
-      real :: trbuf_s(nnz+2,2,2,4),trbuf_r(nnz+2,3,3,4)
-      real :: brbuf_s(nnz+2,2,3,4),brbuf_r(nnz+2,3,2,4)
-      real :: blbuf_s(nnz+2,3,3,4),blbuf_r(nnz+2,2,2,4)
-      real :: tlbuf_s(nnz+2,3,2,4),tlbuf_r(nnx+2,2,3,4)
+      real :: trbuf_s(nnz+2,2,2,5),trbuf_r(nnz+2,3,3,5)
+      real :: brbuf_s(nnz+2,2,3,5),brbuf_r(nnz+2,3,2,5)
+      real :: blbuf_s(nnz+2,3,3,5),blbuf_r(nnz+2,2,2,5)
+      real :: tlbuf_s(nnz+2,3,2,5),tlbuf_r(nnz+2,2,3,5)
       !MPI send counts:
       integer :: rc_s,rc_r,trc_s,trc_r,tc_s,tc_r,tlc_s,tlc_r
       integer :: lc_s,lc_r,blc_s,blc_r,bc_s,bc_r,brc_s,brc_r
@@ -18366,6 +18403,7 @@ c
       vext = 0.0
       wext = 0.0
       Text = 0.0
+      T2ext = 0.0
 
       !First fill the center, since this is just u,v,w on that proc:
 
@@ -18382,11 +18420,15 @@ c
       call xtoz_trans(t(1:nnx,iys:iye,1,izs-1:ize+1),T_t,nnx,nnz,
      +                mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,
      +                myid,ncpu_s,numprocs)
+      call xtoz_trans(t(1:nnx,iys:iye,2,izs-1:ize+1),T2_t,nnx,nnz,
+     +                mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,
+     +                myid,ncpu_s,numprocs)
 
       uext(0:nnz+1,iys:iye,mxs:mxe) = u_t(0:nnz+1,iys:iye,mxs:mxe)
       vext(0:nnz+1,iys:iye,mxs:mxe) = v_t(0:nnz+1,iys:iye,mxs:mxe)
       wext(0:nnz+1,iys:iye,mxs:mxe) = w_t(0:nnz+1,iys:iye,mxs:mxe)
       Text(0:nnz+1,iys:iye,mxs:mxe) = T_t(0:nnz+1,iys:iye,mxs:mxe)
+      T2ext(0:nnz+1,iys:iye,mxs:mxe) = T2_t(0:nnz+1,iys:iye,mxs:mxe)
 
       !Recall that SR assign_nbrs assigned rproc,lproc, etc.
 
@@ -18395,22 +18437,22 @@ c
       !Fill the send buffers:
       
       !I know these are redundant, but so I can keep them straight...
-      tc_s = 4*(nnz+2)*2*(iye-iys+1)
-      tc_r = 4*(nnz+2)*3*(iye-iys+1)
-      trc_s = 4*(nnz+2)*2*2
-      trc_r = 4*(nnz+2)*3*3
-      rc_s = 4*(nnz+2)*(mxe-mxs+1)*2
-      rc_r = 4*(nnx+2)*(mxe-mxs+1)*3
-      tlc_s = 4*(nnz+2)*3*2
-      tlc_r = 4*(nnz+2)*2*3
-      bc_s = 4*(nnz+2)*3*(iye-iys+1)
-      bc_r = 4*(nnz+2)*2*(iye-iys+1)
-      blc_s = 4*(nnz+2)*3*3
-      blc_r = 4*(nnz+2)*2*2
-      lc_s = 4*(nnz+2)*(mxe-mxs+1)*3
-      lc_r = 4*(nnz+2)*(mxe-mxs+1)*2
-      brc_s = 4*(nnz+2)*2*3
-      brc_r = 4*(nnz+2)*3*2
+      tc_s = 5*(nnz+2)*2*(iye-iys+1)
+      tc_r = 5*(nnz+2)*3*(iye-iys+1)
+      trc_s = 5*(nnz+2)*2*2
+      trc_r = 5*(nnz+2)*3*3
+      rc_s = 5*(nnz+2)*(mxe-mxs+1)*2
+      rc_r = 5*(nnz+2)*(mxe-mxs+1)*3
+      tlc_s = 5*(nnz+2)*3*2
+      tlc_r = 5*(nnz+2)*2*3
+      bc_s = 5*(nnz+2)*3*(iye-iys+1)
+      bc_r = 5*(nnz+2)*2*(iye-iys+1)
+      blc_s = 5*(nnz+2)*3*3
+      blc_r = 5*(nnz+2)*2*2
+      lc_s = 5*(nnz+2)*(mxe-mxs+1)*3
+      lc_r = 5*(nnz+2)*(mxe-mxs+1)*2
+      brc_s = 5*(nnz+2)*2*3
+      brc_r = 5*(nnz+2)*3*2
      
       !First u:
       tbuf_s(1:nnz+2,1:iye-iys+1,1:2,1) = u_t(0:nnz+1,iys:iye,mxe-1:mxe)
@@ -18451,6 +18493,16 @@ c
       blbuf_s(1:nnz+2,1:3,1:3,4) = T_t(0:nnz+1,iys:iys+2,mxs:mxs+2)
       lbuf_s(1:nnz+2,1:3,1:mxe-mxs+1,4) = T_t(0:nnz+1,iys:iys+2,mxs:mxe)
       tlbuf_s(1:nnz+2,1:3,1:2,4) = T_t(0:nnz+1,iys:iys+2,mxe-1:mxe)
+
+      !T2:
+      tbuf_s(1:nnz+2,1:iye-iys+1,1:2,5) =T2_t(0:nnz+1,iys:iye,mxe-1:mxe)
+      trbuf_s(1:nnz+2,1:2,1:2,5) = T2_t(0:nnz+1,iye-1:iye,mxe-1:mxe)
+      rbuf_s(1:nnz+2,1:2,1:mxe-mxs+1,5) =T2_t(0:nnz+1,iye-1:iye,mxs:mxe)
+      brbuf_s(1:nnz+2,1:2,1:3,5) = T2_t(0:nnz+1,iye-1:iye,mxs:mxs+2)
+      bbuf_s(1:nnz+2,1:iye-iys+1,1:3,5) =T2_t(0:nnz+1,iys:iye,mxs:mxs+2)
+      blbuf_s(1:nnz+2,1:3,1:3,5) = T2_t(0:nnz+1,iys:iys+2,mxs:mxs+2)
+      lbuf_s(1:nnz+2,1:3,1:mxe-mxs+1,5) =T2_t(0:nnz+1,iys:iys+2,mxs:mxe)
+      tlbuf_s(1:nnz+2,1:3,1:2,5) = T2_t(0:nnz+1,iys:iys+2,mxe-1:mxe)
      
       !Zero out recieve buffers 
       rbuf_r=0.0;trbuf_r=0.0;tbuf_r=0.0;tlbuf_r=0.0;lbuf_r=0.0
@@ -18541,6 +18593,19 @@ c
       Text(0:nnz+1,iys-2:iys-1,mxs:mxe) =
      +     lbuf_r(1:nnz+2,1:2,1:mxe-mxs+1,4)
       Text(0:nnz+1,iys-2:iys-1,mxe+1:mxe+3) = tlbuf_r(1:nnz+2,1:2,1:3,4)
+
+      T2ext(0:nnz+1,iys:iye,mxe+1:mxe+3) = 
+     +     tbuf_r(1:nnz+2,1:iye-iys+1,1:3,5)
+      T2ext(0:nnz+1,iye+1:iye+3,mxe+1:mxe+3) =trbuf_r(1:nnz+2,1:3,1:3,5)
+      T2ext(0:nnz+1,iye+1:iye+3,mxs:mxe) =
+     +     rbuf_r(1:nnz+2,1:3,1:mxe-mxs+1,5)
+      T2ext(0:nnz+1,iye+1:iye+3,mxs-2:mxs-1) =brbuf_r(1:nnz+2,1:3,1:2,5)
+      T2ext(0:nnz+1,iys:iye,mxs-2:mxs-1) = 
+     +     bbuf_r(1:nnz+2,1:iye-iys+1,1:2,5)
+      T2ext(0:nnz+1,iys-2:iys-1,mxs-2:mxs-1) =blbuf_r(1:nnz+2,1:2,1:2,5)
+      T2ext(0:nnz+1,iys-2:iys-1,mxs:mxe) =
+     +     lbuf_r(1:nnz+2,1:2,1:mxe-mxs+1,5)
+      T2ext(0:nnz+1,iys-2:iys-1,mxe+1:mxe+3) =tlbuf_r(1:nnz+2,1:2,1:3,5)
 
 
       end subroutine fill_ext
