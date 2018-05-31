@@ -780,7 +780,7 @@ c
       endif
       if(msave_v .and. istage .eq. 1) then
          call save_bndy(it)
-         call save_viz(it)
+!         call save_viz(it)
       endif
 c
 c --------- get rhs/J for all equations
@@ -12861,8 +12861,8 @@ c           u(ix,iy,iz) = ug(iz) - ugal
 !              t(ix,iy,1,iz) = t_lower + 
 !     +                        (zgrid_u(ix,iy,iz+1) - z_lower)*dtdzf(1)
 !            endif
-             t(ix,iy,1,iz) = 299.0
-             t(ix,iy,2,iz) = 0.0
+             t(ix,iy,1,iz) = 300.0
+             t(ix,iy,2,iz) = 0.01
          enddo
          enddo
          do iy=iys,iye
@@ -13690,8 +13690,7 @@ c
          do is = 1,nscl
             do j = iys,iye
             do i = 1,nnx
-c              t(i,j,is,k) = temp(6+is,i,j)
-               t(i,j,is,k) = 300.0
+              t(i,j,is,k) = temp(6+is,i,j)
             enddo
             enddo
          enddo
@@ -16040,9 +16039,9 @@ c
 c
 c ------------- open unit for standard printout
 c
-      path_prt = case_inp(1:3)//'.le.xxxxx.out'
-      write(path_prt(8:12),'(i5.5)') myid
-      open(nprt,file=path_prt,form='formatted')
+!      path_prt = case_inp(1:3)//'.le.xxxxx.out'
+!      write(path_prt(8:12),'(i5.5)') myid
+!      open(nprt,file=path_prt,form='formatted')
 c
       return
       end
@@ -17630,9 +17629,6 @@ c
 
          call uf_interp(hpart)
 
-         part%qinf = 0.01
-
-
          if (it .le. 1) then
             part%vp(1:3) = part%uf
             part%Tp = part%Tf
@@ -17692,6 +17688,7 @@ c
 
          !Update the particle properties
          part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
+         
          part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
          part%Tp = Tptmp + dt*gama(istage)*part%Tprhs_s
          part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
@@ -18794,6 +18791,7 @@ c
       !Now we have the weights - compute the velocity at xp:
         part%uf(1:3) = 0.0
         part%Tf = 0.0
+        part%qinf = 0.0
         do k = 1,6
         do j = 1,6
         do i = 1,6
@@ -18807,6 +18805,8 @@ c
             part%uf(3) = part%uf(3)+wext(izuv,iy,ix)*wt(1,i)*
      +                   wt(2,j)*wt(3,k) 
             part%Tf = part%Tf+Text(izuv,iy,ix)*wt(1,i)*
+     +                   wt(2,j)*wt(3,k) 
+            part%qinf = part%qinf+T2ext(izuv,iy,ix)*wt(1,i)*
      +                   wt(2,j)*wt(3,k) 
          end do
          end do 
