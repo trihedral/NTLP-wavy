@@ -140,6 +140,11 @@ c ----------------------------------------------------------------------
       real, allocatable :: Tpsum(:,:,:),Tpsum_t(:,:,:)
       real, allocatable :: Tpsqrsum(:,:,:),Tpsqrsum_t(:,:,:)
       real, allocatable :: wpTpsum(:,:,:),wpTpsum_t(:,:,:)
+      real, allocatable :: Tfsum(:,:,:),Tfsum_t(:,:,:)
+      real, allocatable :: qfsum(:,:,:),qfsum_t(:,:,:)
+      real, allocatable :: radsum(:,:,:),radsum_t(:,:,:)
+      real, allocatable :: rad2sum(:,:,:),rad2sum_t(:,:,:)
+      real, allocatable :: qstarsum(:,:,:),qstarsum_t(:,:,:)
       integer :: particletype,pad_diff
       integer :: numpart,tnumpart,ngidx
       integer :: num_reintro,tot_reintro,his_reintro
@@ -344,7 +349,9 @@ c ----------------------------------------------------------------------
      +           vp1mean(maxnz),vp2mean(maxnz),vp3mean(maxnz),
      +           vp1msqr(maxnz),vp2msqr(maxnz),vp3msqr(maxnz),
      +           upwpm(maxnz),
-     +           Tpmean(maxnz),Tpmsqr(maxnz),wpTpm(maxnz)
+     +           Tpmean(maxnz),Tpmsqr(maxnz),wpTpm(maxnz),
+     +           Tfmean(maxnz),qfmean(maxnz),radmean(maxnz),
+     +           rad2mean(maxnz),qstarmean(maxnz)
         real ::  xkn(maxnx),ykn(maxny),
      +           xk(maxnx),yk(maxny),
      +           xkk(maxnx),ykk(maxny),
@@ -377,7 +384,9 @@ c ----------------------------------------------------------------------
      +           vp1mean(:),vp2mean(:),vp3mean(:),
      +           vp1msqr(:),vp2msqr(:),vp3msqr(:),
      +           upwpm(:),
-     +           Tpmean(:),Tpmsqr(:),wpTpm(:)
+     +           Tpmean(:),Tpmsqr(:),wpTpm(:),
+     +           Tfmean(:),qfmean(:),radmean(:),
+     +           rad2mean(:),qstarmean(:)
         real, pointer ::  
      +           xkn(:), ykn(:), xk(:), yk(:), xkk(:), ykk(:),
      +           xks(:,:), wavexy(:,:)
@@ -459,6 +468,11 @@ c
              Tpmean  => c_s%Tpmean   ; isize = isize + size(Tpmean)
              Tpmsqr  => c_s%Tpmsqr   ; isize = isize + size(Tpmsqr)
              wpTpm   => c_s%wpTpm    ; isize = isize + size(wpTpm)
+             Tfmean  => c_s%Tfmean   ; isize = isize + size(Tfmean)
+             qfmean  => c_s%qfmean   ; isize = isize + size(qfmean)
+             radmean  => c_s%radmean ; isize = isize + size(radmean)
+             rad2mean => c_s%rad2mean; isize = isize + size(rad2mean)
+             qstarmean => c_s%qstarmean; isize = isize + size(qstarmean)
              xkn      => c_s%xkn
              ykn      => c_s%ykn
              xk       => c_s%xk
@@ -12813,6 +12827,15 @@ c
       partsrc_t = 0.0
       partTsrc = 0.0
       partTsrc_t = 0.0
+      qfsum = 0.0
+      qfsum_t = 0.0
+      radsum = 0.0
+      radsum_t = 0.0
+      rad2sum = 0.0
+      rad2sum_t = 0.0
+      qstarsum = 0.0
+      qstarsum_t = 0.0
+      
 
 c
 c ------------ note set nmatch in sr. iso so that
@@ -14198,7 +14221,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      parameter(js = 28, ns = 6, nstat = js + ns*nscl)
+      parameter(js = 33, ns = 6, nstat = js + ns*nscl)
       real stat(1:nnz,nstat), buf(4)
 c
 c -------- stat(.,1) = u*u = ups
@@ -14229,6 +14252,11 @@ c          stat(.,25) = upwp = up'*wp'
 c          stat(.,26) = Tpsum
 c          stat(.,27) = Tpsqrsum
 c          stat(.,28) = wpTpsum
+c          stat(.,29) = Tfsum
+c          stat(.,30) = qfsum
+c          stat(.,31) = radsum
+c          stat(.,32) = rad2sum
+c          stat(.,33) = qstarsum
 c          stat(.,m1) = resolved scalar flux w_ft at zw = wtle
 c          stat(.,m2) = resolved scalar flux u_ft at zu = utle
 c          stat(.,m3) = resolved scalar flux v_ft at zu = vtle
@@ -14312,6 +14340,11 @@ c
          stat(k,26) = stat(k,26) + Tpsum(i,j,k)
          stat(k,27) = stat(k,27) + Tpsqrsum(i,j,k)
          stat(k,28) = stat(k,28) + wpTpsum(i,j,k)
+         stat(k,29) = stat(k,29) + Tfsum(i,j,k)
+         stat(k,30) = stat(k,30) + qfsum(i,j,k)
+         stat(k,31) = stat(k,31) + radsum(i,j,k)
+         stat(k,32) = stat(k,32) + rad2sum(i,j,k)
+         stat(k,33) = stat(k,33) + qstarsum(i,j,k)
       enddo
       enddo
 c
@@ -14419,6 +14452,11 @@ c
       Tpmean(k)   = stat(k,26)/stat(k,18)
       Tpmsqr(k)   = sqrt(stat(k,27)/stat(k,18)-Tpmean(k)**2)
       wpTpm(k)    = stat(k,28)/stat(k,18) - (Tpmean(k)*vp3mean(k))
+      Tfmean(k)   = stat(k,29)/stat(k,18)
+      qfmean(k)   = stat(k,30)/stat(k,18)
+      radmean(k)   = stat(k,31)/stat(k,18)
+      rad2mean(k)   = stat(k,32)/stat(k,18)
+      qstarmean(k)   = stat(k,33)/stat(k,18)
 
 c
 c ------------ get scalar resolved fluxes and variances
@@ -15049,6 +15087,16 @@ c
       allocate(partsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1,1:3))
       allocate(partTsrc(nnx,iys:iye,izs-1:ize+1))
       allocate(partTsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1))
+      allocate(Tfsum(nnx,iys:iye,izs-1:ize+1))
+      allocate(Tfsum_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(qfsum(nnx,iys:iye,izs-1:ize+1))
+      allocate(qfsum_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(radsum(nnx,iys:iye,izs-1:ize+1))
+      allocate(radsum_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(rad2sum(nnx,iys:iye,izs-1:ize+1))
+      allocate(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(qstarsum(nnx,iys:iye,izs-1:ize+1))
+      allocate(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe))
 
 c
 c ------------- allocate space for boundary condition arrays
@@ -17614,6 +17662,11 @@ c
       Tpsqrsum_t = 0.0
       wpTpsum_t = 0.0
       myRep_avg = 0.0
+      Tfsum_t = 0.0
+      qfsum_t = 0.0
+      radsum_t = 0.0
+      rad2sum_t = 0.0
+      qstarsum_t = 0.0
 
       !t_s = mpi_wtime()
 
@@ -17813,6 +17866,27 @@ c
 
       call ztox_trans(partcount_t(0:nnz+1,iys:iye,mxs:mxe),
      +                partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(Tfsum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                Tfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(qfsum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                qfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                rad2sum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                qstarsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
       end if
@@ -18851,6 +18925,16 @@ c
      +                          partmass*part%Tp**2
       wpTpsum_t(kpt,jpt,ipt) = wpTpsum_t(kpt,jpt,ipt) +
      +                          partmass*part%Tp*part%vp(3)
+      Tfsum_t(kpt,jpt,ipt) = Tfsum_t(kpt,jpt,ipt) +
+     +                       partmass*part%Tf
+      qfsum_t(kpt,jpt,ipt) = qfsum_t(kpt,jpt,ipt) +
+     +                       partmass*part%qinf
+      radsum_t(kpt,jpt,ipt) = radsum_t(kpt,jpt,ipt) +
+     +                       partmass*part%radius
+      rad2sum_t(kpt,jpt,ipt) = rad2sum_t(kpt,jpt,ipt) +
+     +                       partmass*part%radius**2
+      qstarsum_t(kpt,jpt,ipt) = qstarsum_t(kpt,jpt,ipt) +
+     +                       partmass*part%qstar
 
       end subroutine particle_stats
 
