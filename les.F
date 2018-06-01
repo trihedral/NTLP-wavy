@@ -11,7 +11,7 @@ c ----------------------------------------------------------------------
      + ivis0,ifix_dt,new_vis,iflat,
      + i3d_surf,i_pm,lpbc,k_stab,
      + no_pgrad,ispray,iDNS,
-     + ifields,ievap
+     + ifields,ievap,i_tank
 
 c
 c -------- j_recl = record length in "bytes" for history file
@@ -10689,7 +10689,6 @@ c
      +         z_tank_i(nnx), u_tank_i(nnx), w_tank_i(nnx),
      +         hdot_i(nnx), hx_i(nnx))
 c
-      i_tank = 7
       lut    = 89
       close(lut)
       if(i_tank == 1) then     ! no breaking case
@@ -19185,7 +19184,7 @@ c
       namelist /flags/ iradup,ifilt,itcut,isubs,ibrcl,iocean,idebug,
      +         ivis0,new_vis,ismlt,ifree,iupwnd,iskew,ibuoy,ifix_dt,
      +         i_move_step,method,iz_space,iflat,i3d_surf,i_pm,lpbc,
-     +         k_stab,no_pgrad,ispray,iDNS,ifields,ievap,isfc
+     +         k_stab,no_pgrad,ispray,iDNS,ifields,ievap,isfc,i_tank
 
       namelist /constants/ grav, t00, fcor, tnumpart,
      +         radius_init,part_grav,Vpmax,nuf,Pra,Sc,
