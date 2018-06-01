@@ -136,6 +136,8 @@ c ----------------------------------------------------------------------
       real, allocatable :: vpsum_t(:,:,:,:),vpsqrsum_t(:,:,:,:)
       real, allocatable :: upwp_t(:,:,:),upwp(:,:,:)
       real, allocatable :: partcount(:,:,:),partsrc(:,:,:,:)
+      real, allocatable :: partcountU_t(:,:,:),partcountU(:,:,:)
+      real, allocatable :: partflux(:,:,:),partflux_t(:,:,:)
       real, allocatable :: vpsum(:,:,:,:),vpsqrsum(:,:,:,:)
       real, allocatable :: Tpsum(:,:,:),Tpsum_t(:,:,:)
       real, allocatable :: Tpsqrsum(:,:,:),Tpsqrsum_t(:,:,:)
@@ -151,7 +153,7 @@ c ----------------------------------------------------------------------
       integer :: iseed
       integer,parameter :: rbins=4
       real :: residual(rbins)
-      real :: Rep_avg,part_grav(3),Vpmax
+      real :: Rep_avg,part_grav(3),Vpmax,dz_U
       real :: vp_init(3),Tp_init,radius_init
 
       real :: rhoa,rhow,nuf
@@ -162,7 +164,7 @@ c ----------------------------------------------------------------------
       type :: particle
       integer :: pidx,procidx
       real :: vp(3),xp(3),xip(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s,Tf
-      real :: Tprhs_L,radius,radrhs,qinf,qstar,m_s
+      real :: Tprhs_L,radius,radrhs,qinf,qstar,m_s,xip_i(3)
       type(particle), pointer :: prev,next
       end type particle
 
@@ -345,13 +347,13 @@ c ----------------------------------------------------------------------
      +           t_wp(maxnz), t_tau(maxnz),
      +           t_tran(maxnz), t_buoy(maxnz),
      +           t_diss(maxnz), t_sprod(maxnz),
-     +           zconc(maxnz),
+     +           zconc(maxnz),zconc_U(maxnz),
      +           vp1mean(maxnz),vp2mean(maxnz),vp3mean(maxnz),
      +           vp1msqr(maxnz),vp2msqr(maxnz),vp3msqr(maxnz),
      +           upwpm(maxnz),
      +           Tpmean(maxnz),Tpmsqr(maxnz),wpTpm(maxnz),
      +           Tfmean(maxnz),qfmean(maxnz),radmean(maxnz),
-     +           rad2mean(maxnz),qstarmean(maxnz)
+     +           rad2mean(maxnz),qstarmean(maxnz),pflux(maxnz)
         real ::  xkn(maxnx),ykn(maxny),
      +           xk(maxnx),yk(maxny),
      +           xkk(maxnx),ykk(maxny),
@@ -380,13 +382,13 @@ c ----------------------------------------------------------------------
      +           wps(:), tps(:,:), t_rprod(:), t_wq(:),
      +           t_wp(:), t_tau(:), t_tran(:), t_buoy(:),
      +           t_diss(:), t_sprod(:),
-     +           zconc(:),
+     +           zconc(:),zconc_U(:),
      +           vp1mean(:),vp2mean(:),vp3mean(:),
      +           vp1msqr(:),vp2msqr(:),vp3msqr(:),
      +           upwpm(:),
      +           Tpmean(:),Tpmsqr(:),wpTpm(:),
      +           Tfmean(:),qfmean(:),radmean(:),
-     +           rad2mean(:),qstarmean(:)
+     +           rad2mean(:),qstarmean(:),pflux(:)
         real, pointer ::  
      +           xkn(:), ykn(:), xk(:), yk(:), xkk(:), ykk(:),
      +           xks(:,:), wavexy(:,:)
@@ -458,6 +460,7 @@ c
              t_diss   => c_s%t_diss    ; isize = isize + size(t_diss)
              t_sprod  => c_s%t_sprod   ; isize = isize + size(t_sprod)
              zconc   => c_s%zconc    ; isize = isize + size(zconc)
+             zconc_U => c_s%zconc_U  ; isize = isize + size(zconc_U)
              vp1mean  => c_s%vp1mean ; isize = isize + size(vp1mean)
              vp2mean  => c_s%vp2mean ; isize = isize + size(vp2mean)
              vp3mean  => c_s%vp3mean ; isize = isize + size(vp3mean)
@@ -473,6 +476,7 @@ c
              radmean  => c_s%radmean ; isize = isize + size(radmean)
              rad2mean => c_s%rad2mean; isize = isize + size(rad2mean)
              qstarmean => c_s%qstarmean; isize = isize + size(qstarmean)
+             pflux => c_s%pflux; isize = isize + size(pflux)
              xkn      => c_s%xkn
              ykn      => c_s%ykn
              xk       => c_s%xk
@@ -12811,6 +12815,10 @@ c
       !Initialize partcount to 0:
       partcount = 0.0
       partcount_t = 0.0
+      partcountU = 0.0
+      partcountU_t = 0.0
+      partflux = 0.0
+      partflux_t = 0.0
       vpsum = 0.0
       vpsum_t = 0.0
       vpsqrsum = 0.0
@@ -14221,7 +14229,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      parameter(js = 33, ns = 6, nstat = js + ns*nscl)
+      parameter(js = 35, ns = 6, nstat = js + ns*nscl)
       real stat(1:nnz,nstat), buf(4)
 c
 c -------- stat(.,1) = u*u = ups
@@ -14257,6 +14265,8 @@ c          stat(.,30) = qfsum
 c          stat(.,31) = radsum
 c          stat(.,32) = rad2sum
 c          stat(.,33) = qstarsum
+c          stat(.,34) = zconc_U
+c          stat(.,35) = pflux
 c          stat(.,m1) = resolved scalar flux w_ft at zw = wtle
 c          stat(.,m2) = resolved scalar flux u_ft at zu = utle
 c          stat(.,m3) = resolved scalar flux v_ft at zu = vtle
@@ -14345,6 +14355,8 @@ c
          stat(k,31) = stat(k,31) + radsum(i,j,k)
          stat(k,32) = stat(k,32) + rad2sum(i,j,k)
          stat(k,33) = stat(k,33) + qstarsum(i,j,k)
+         stat(k,34) = stat(k,34) + partcountU(i,j,k)
+         stat(k,35) = stat(k,35) + partflux(i,j,k)
       enddo
       enddo
 c
@@ -14441,22 +14453,24 @@ c
       drg_zs_x(k) =  stat(k,15)*fnxy
       drg_zs_y(k) =  stat(k,16)*fnxy
       wwle(k)     =  stat(k,17)*fnxy
-      zconc(k)    = stat(k,18)/xl/yl/dzw(iz)
-      vp1mean(k)  = stat(k,19)/stat(k,18)
-      vp2mean(k)  = stat(k,20)/stat(k,18)
-      vp3mean(k)  = stat(k,21)/stat(k,18)
-      vp1msqr(k)  = sqrt(stat(k,22)/stat(k,18) - vp1mean(k)**2)
-      vp2msqr(k)  = sqrt(stat(k,23)/stat(k,18) - vp2mean(k)**2)
-      vp3msqr(k)  = sqrt(stat(k,24)/stat(k,18) - vp3mean(k)**2)
-      upwpm(k)    = stat(k,25)/stat(k,18)-(vp1mean(k)*vp3mean(k))
-      Tpmean(k)   = stat(k,26)/stat(k,18)
-      Tpmsqr(k)   = sqrt(stat(k,27)/stat(k,18)-Tpmean(k)**2)
-      wpTpm(k)    = stat(k,28)/stat(k,18) - (Tpmean(k)*vp3mean(k))
-      Tfmean(k)   = stat(k,29)/stat(k,18)
-      qfmean(k)   = stat(k,30)/stat(k,18)
-      radmean(k)   = stat(k,31)/stat(k,18)
-      rad2mean(k)   = stat(k,32)/stat(k,18)
-      qstarmean(k)   = stat(k,33)/stat(k,18)
+      zconc(k)    = stat(k,18)/xl/yl/dzw(k)
+      zconc_U(k)  = stat(k,34)/xl/yl/dz_U
+      vp1mean(k)  = stat(k,19)/stat(k,34)
+      vp2mean(k)  = stat(k,20)/stat(k,34)
+      vp3mean(k)  = stat(k,21)/stat(k,34)
+      vp1msqr(k)  = sqrt(stat(k,22)/stat(k,34) - vp1mean(k)**2)
+      vp2msqr(k)  = sqrt(stat(k,23)/stat(k,34) - vp2mean(k)**2)
+      vp3msqr(k)  = sqrt(stat(k,24)/stat(k,34) - vp3mean(k)**2)
+      upwpm(k)    = stat(k,25)/stat(k,34)-(vp1mean(k)*vp3mean(k))
+      Tpmean(k)   = stat(k,26)/stat(k,34)
+      Tpmsqr(k)   = sqrt(stat(k,27)/stat(k,34)-Tpmean(k)**2)
+      wpTpm(k)    = stat(k,28)/stat(k,34) - (Tpmean(k)*vp3mean(k))
+      Tfmean(k)   = stat(k,29)/stat(k,34)
+      qfmean(k)   = stat(k,30)/stat(k,34)
+      radmean(k)   = stat(k,31)/stat(k,34)
+      rad2mean(k)   = stat(k,32)/stat(k,34)
+      qstarmean(k)   = stat(k,33)/stat(k,34)
+      pflux(k)   = stat(k,35)
 
 c
 c ------------ get scalar resolved fluxes and variances
@@ -15071,6 +15085,10 @@ c
       !NOTE: allocate even if ispray == 0, since it's in xy_stats
       allocate(partcount(nnx,iys:iye,izs-1:ize+1))
       allocate(partcount_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(partcountU(nnx,iys:iye,izs-1:ize+1))
+      allocate(partcountU_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(partflux(nnx,iys:iye,izs-1:ize+1))
+      allocate(partflux_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(upwp_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(upwp(nnx,iys:iye,izs-1:ize+1))
       allocate(vpsum(nnx,iys:iye,izs-1:ize+1,1:3))
@@ -17212,7 +17230,7 @@ c
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
 
-      num_reals = 3*7 + 6
+      num_reals = 3*8 + 6
       
       blcts(1:3) = (/2,num_reals,2/)
       displs(1) = 0
@@ -17430,6 +17448,9 @@ c
       part%xp(1:2) = part%xip(1:2)
       part%xp(3) = part%xip(3) + 
      +             hpart*(1.0-part%xip(3)/zl)**a_decay
+
+      part%xip_i(1:2) = part%xip(1:2)
+      part%xip_i(3) = 0.0
 
       part%vp(1:3) = vp(1:3)
       part%Tp = Tp
@@ -17655,6 +17676,8 @@ c
       call particle_bcs_nonperiodic
 
       partcount_t = 0.0
+      partcountU_t = 0.0
+      partflux_t = 0.0
       vpsum_t = 0.0
       upwp_t = 0.0
       vpsqrsum_t = 0.0
@@ -17740,6 +17763,7 @@ c
 
 
          !Update the particle properties
+         if (istage==1) part%xip_i(1:3) = part%xip(1:3)
          part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
          
          part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
@@ -17794,7 +17818,7 @@ c
       !Now that particles are in their updated position, 
       !compute their contribution to the momentum coupling:
       !t_s = mpi_wtime()
-      !call particle_coupling_update
+      call update_particle_stats
       !call mpi_barrier(mpi_comm_world,ierr)
       !t_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time cpl: ', t_f - t_s
@@ -17866,6 +17890,14 @@ c
 
       call ztox_trans(partcount_t(0:nnz+1,iys:iye,mxs:mxe),
      +                partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(partcountU_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partcountU(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(partflux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partflux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
@@ -18775,7 +18807,7 @@ c
 !
 !      !call inputs  are the nodes associated with the volume that each
 !      part. lies in
-      call particle_stats(ijpts(1,3),ijpts(2,3),kuvpts(3))
+!      call particle_stats(ijpts(1,3),ijpts(2,3),kuvpts(3))
 !   
 !---------
 
@@ -18909,6 +18941,55 @@ c
       partmass = rhop*Volp
       partcount_t(kpt,jpt,ipt) = partcount_t(kpt,jpt,ipt) + partmass  !PARTICLE AVERAGES ARE MASS-WEIGHTED
 
+!      !Get su mean, mean-squared of particle velocities at each level
+!      upwp_t(kpt,jpt,ipt) = upwp_t(kpt,jpt,ipt) +
+!     +                      partmass*part%vp(1)*part%vp(3)
+!      do i = 1,3
+!      vpsum_t(kpt,jpt,ipt,i) = vpsum_t(kpt,jpt,ipt,i) +
+!     +                         part%vp(i)*partmass
+!      vpsqrsum_t(kpt,jpt,ipt,i)=vpsqrsum_t(kpt,jpt,ipt,i)+
+!     +                          partmass*part%vp(i)**2
+!      end do
+!
+!      Tpsum_t(kpt,jpt,ipt) = Tpsum_t(kpt,jpt,ipt) +
+!     +                       partmass*part%Tp
+!      Tpsqrsum_t(kpt,jpt,ipt) = Tpsqrsum_t(kpt,jpt,ipt) +
+!     +                          partmass*part%Tp**2
+!      wpTpsum_t(kpt,jpt,ipt) = wpTpsum_t(kpt,jpt,ipt) +
+!     +                          partmass*part%Tp*part%vp(3)
+!      Tfsum_t(kpt,jpt,ipt) = Tfsum_t(kpt,jpt,ipt) +
+!     +                       partmass*part%Tf
+!      qfsum_t(kpt,jpt,ipt) = qfsum_t(kpt,jpt,ipt) +
+!     +                       partmass*part%qinf
+!      radsum_t(kpt,jpt,ipt) = radsum_t(kpt,jpt,ipt) +
+!     +                       partmass*part%radius
+!      rad2sum_t(kpt,jpt,ipt) = rad2sum_t(kpt,jpt,ipt) +
+!     +                       partmass*part%radius**2
+!      qstarsum_t(kpt,jpt,ipt) = qstarsum_t(kpt,jpt,ipt) +
+!     +                       partmass*part%qstar
+
+      end subroutine particle_stats
+
+      subroutine particle_stats_U(ipt,jpt,kpt)
+      use particles
+      use pars
+      use con_data
+      implicit none
+      integer :: i,ipt,jpt,kpt
+      real :: partmass,Volp,rhop
+
+      !Takes in ipt,jpt,kpt as the node to the "bottom left" of the
+      !particle
+      !(i.e. the node in the negative direction for x,y,z)
+      !and computes quantities needed to get particle statistics
+
+      !partcount_t(kpt,jpt,ipt) = partcount_t(kpt,jpt,ipt) + 1.0
+
+      Volp = pi2*2.0/3.0*part%radius**3
+      rhop = (part%m_s+Volp*rhow)/Volp
+      partmass = rhop*Volp
+      partcountU_t(kpt,jpt,ipt) = partcountU_t(kpt,jpt,ipt) + partmass  !PARTICLE AVERAGES ARE MASS-WEIGHTED
+
       !Get su mean, mean-squared of particle velocities at each level
       upwp_t(kpt,jpt,ipt) = upwp_t(kpt,jpt,ipt) +
      +                      partmass*part%vp(1)*part%vp(3)
@@ -18936,8 +19017,116 @@ c
       qstarsum_t(kpt,jpt,ipt) = qstarsum_t(kpt,jpt,ipt) +
      +                       partmass*part%qstar
 
-      end subroutine particle_stats
+      end subroutine particle_stats_U
 
+      subroutine update_particle_stats
+
+      use particles
+      use pars
+      use con_data
+      use con_stats
+      implicit none
+      include 'mpif.h'
+      real :: rhop,taup_i,partmass
+      real :: xv,yv,zv
+      integer :: i,j,k,ncount,ipt,jpt,kpt,kwpt,kUpt
+      integer :: ix,iy,iz
+      real :: lref,Cvv,Cva,Cpv
+      real :: zu_1,zu_nnz
+      integer :: iz_beg,iz_end
+
+
+      part => first_particle
+      do while (associated(part))
+
+      ipt = floor(part%xp(1)/dx) + 1
+      jpt = floor(part%xp(2)/dy) + 1
+
+
+      kUpt = floor((part%xip(3)-0.0)/dz_U) + 1
+      call particle_stats_U(ipt,jpt,kUpt)
+
+      !Also compute particle flux statistics, which is slightly more
+      !complicated:
+      zu_1 = 0.5*zl/nnz
+      zu_nnz = zl - zu_1
+
+      if (part%xip_i(3) .gt. 0.0) then
+      !Compute particle flux statistics based on the move:
+      if (part%xip_i(3) .lt. part%xip(3)) then  !Particle moved up
+
+        iz_beg = floor((part%xip_i(3)-zu_1)/dz_U) + 2
+        iz_end = floor((part%xip(3)-zu_1)/dz_U) + 1
+
+
+         do iz=iz_beg,iz_end
+
+            if (iz .lt. 1) then
+            write(*,*) 'up iz<1:',iz,part%xip(3),part%xip_i(3)
+            end if
+            if (iz .gt. nnz) then
+            write(*,*) 'up iz>nnz:',iz,part%xip(3),part%xip_i(3)
+            end if
+
+            partflux_t(iz,jpt,ipt) = partflux_t(iz,jpt,ipt) + 1.0
+         end do
+
+      elseif (part%xip_i(3) .gt. part%xip(3)) then  !Particle moved down
+
+        iz_beg = floor((part%xip(3)-zu_1)/dz_U) + 2
+        iz_end = floor((part%xip_i(3)-zu_1)/dz_U) + 1
+
+         do iz=iz_beg,iz_end
+
+            if (iz .lt. 1) then
+            write(*,*) 'dn iz<1:',iz,part%xip(3),part%xip_i(3)
+            end if
+            if (iz .gt. nnz) then
+            write(*,*) 'dn iz>nnz:',iz,part%xip(3),part%xip_i(3)
+            end if
+
+            partflux_t(iz,jpt,ipt) = partflux_t(iz,jpt,ipt) - 1.0
+         end do
+
+      end if
+      end if
+
+
+      !First, as done in uf_interp, must find the "leftmost" node
+      !of volume where particle belongs:
+      !(must repeat since now particle locations have been updated)
+
+      do iz=0,nnz+1
+         if (zz(iz) .GT. part%xip(3)) go to 1299
+      end do
+1299  continue
+      kpt = iz-1
+
+      !Do again for w:
+      do iz = 0,nnz+1
+         if (z(iz) .GT. part%xip(3)) go to 1120
+      end do
+1120  continue
+
+      kwpt = iz
+
+
+!---------
+      !As an aside, use ipt,jpt,kwpt to update the particle numbers at
+      !each cell:
+
+      !call inputs are the nodes associated with the volume that each
+      !part. lies in
+      call particle_stats(ipt,jpt,kwpt)
+
+
+!---------
+
+      part => part%next
+      end do
+
+
+      end subroutine update_particle_stats
 
       function ran2(idum)
       integer :: idum,IM1,IM2,IMM1,IA1,IA2,IQ1,IQ2,IR1,IR2,NTAB,NDIV
@@ -19025,6 +19214,7 @@ c
       if (myid==0) print constants
       CpaCpp = Cpa/Cpp
 
+      dz_U = (zl-0.0)/maxnz
 
 
       end subroutine read_input_file
