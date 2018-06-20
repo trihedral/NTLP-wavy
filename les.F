@@ -1317,6 +1317,7 @@ c
       end
       subroutine setup(it)
 c
+      use particles
       use pars
       use fields
       use fftwk
@@ -1526,7 +1527,8 @@ c                account for box height
 c
       t_ref      = 0.0
 c
-      dpdx_con_z = dpdx_con/zl
+       dpdx_con_z = rhoa*ustar_tank**2/zl
+      !dpdx_con_z = dpdx_con/zl
       !dpdx_con_z = 0.0
 c
 c -------------------- specify cooling rate and initial
@@ -10765,19 +10767,19 @@ c
       enddo
       if (myid==0) write(*,*) 'Finished reading tank data'
 c
-c ---------- change lengths to m from cm and make dimensionless by 
-c            wavelength
+c ---------- change lengths to m from cm
 c
       do i=1,npts_t
-         xx(i)      = xx(i)*0.01/wave_l
-         zz_tank(i) = zz_tank(i)*0.01/wave_l
-         us(i)      = us(i)/ustar_tank
-         ws(i)      = ws(i)/ustar_tank
+         xx(i)      = xx(i)*0.01
+         zz_tank(i) = zz_tank(i)*0.01
+         us(i)      = us(i)
+         ws(i)      = ws(i)
       enddo
 c
-      c_speed = c_speed/ustar_tank
-      wave_l  = 1.0
-      wave_k  = pi2
+!Commenting out the nondimensionalizations:
+!      c_speed = c_speed/ustar_tank
+!      wave_l  = 1.0
+!      wave_k  = pi2
 c
       write(nprt,1001) (i,xx(i), zz_tank(i),us(i),ws(i),
      +                  i=1,nnx)
@@ -17186,7 +17188,7 @@ c
       do idx=1,numpart
          xv = ran2(iseed)*(xmax-xmin) + xmin
          yv = ran2(iseed)*(ymax-ymin) + ymin
-         zv = ran2(iseed)*(zl-0.25) + 0.25
+         zv = ran2(iseed)*zl
          xp_init = (/xv,yv,zv/)
          call create_particle(xp_init,vp_init,Tp_init,radius_init,idx,
      +       z_tank_i(1:nnx),xpart(1:nnx),y2part(1:nnx))
