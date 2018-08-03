@@ -31,7 +31,7 @@ c
 
       !Boundary conditions and other parameters
       real :: Uo,Ttop(nscl),Tbot(nscl),qstar(nscl),tsfcc(nscl),RHbot
-      real :: ugcont,vgcont,fcor,t00,grav
+      real :: ugcont,vgcont,fcor,t00,grav,ustar_tank,waveslope
       real :: zi, zl, xl, yl, zw1, zo
       integer :: isfc(nscl)
 
@@ -107,7 +107,8 @@ c ----------------------------------------------------------------------
       character*80  path_res, path_sav, path_his, path_prt,
      +              path_sav_v, path_sav_c, path_part,
      +              path_sav_p, path_sav_h, path_sav_part,
-     +              path_sav_hp, path_sav_g, path_bndy,path_ran
+     +              path_sav_hp, path_sav_g, path_bndy,path_ran,
+     +              path_histog, path_sav_hist
       character case_inp*3
       character*80 path_viz_xy, path_viz_xz, path_viz_yz, path_stuf,
      +             path_seed
@@ -152,19 +153,27 @@ c ----------------------------------------------------------------------
       integer :: num_reintro,tot_reintro,his_reintro
       integer :: iseed
       integer,parameter :: rbins=4
-      real :: residual(rbins)
       real :: Rep_avg,part_grav(3),Vpmax,dz_U
       real :: vp_init(3),Tp_init,radius_init
 
       real :: rhoa,rhow,nuf
       real :: CpaCpp,Pra,Sc,Cpa,Cpp
       real :: Mw,Ru,Sal,Ms,Gam,Ion,Os
+
+      integer, parameter :: histbins = 256,numhistvars=4
+      integer :: hist_flag=0
+      real :: hist_locations(histbins+2,histbins+2)
+      real :: hist_restime(histbins+2,histbins+2)
+      real :: hist_height(histbins+2,histbins+2)
+      real :: bins(histbins+2,4)  !residence time, wave-relative origin, wave-relative death, max height
+
       
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
       type :: particle
       integer :: pidx,procidx
       real :: vp(3),xp(3),xip(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s,Tf
-      real :: Tprhs_L,radius,radrhs,qinf,qstar,m_s,xip_i(3)
+      real :: Tprhs_L,radius,radrhs,qinf,qstar,m_s,xip_i(3),xp_0(3),t0
+      real :: zpmax
       type(particle), pointer :: prev,next
       end type particle
 
@@ -800,6 +809,12 @@ c
          call save_bndy(it)
 !         call save_viz(it)
       endif
+
+      if (msave .and. istage .eq. 1) then
+        call write_histograms(it-itape+1)
+        call clean_histograms
+      end if
+
 c
 c --------- get rhs/J for all equations
 c
@@ -1312,6 +1327,7 @@ c
       path_viz_yz = path_seed
       path_stuf   = path_seed
       path_bndy   = path_seed
+      path_histog = path_seed
 c
       return
       end
@@ -10742,21 +10758,16 @@ c
          c_speed = 0.606335E+00
          wave_k  = pi2/wave_l
          ustar_tank = 0.4928 ! from table 2 of banner 1990
-      elseif(i_tank == 10) then ! Trying to replicate Sullivan et al. (2000)
-         open(lut,file='./emily_wave.dat')
+      elseif(i_tank == 10) then !7/12/18: Particle-laden monochromatic turbulence
+         open(lut,file='./monochromatic.dat')
+         !wave_l and c_speed now in the params.in file!
          npts_t  = 1000
-         wave_l  = 1.0*0.01 !Must trick it so that the nondimensionalization process works below
-         c_speed = 0.25
          wave_k  = pi2/wave_l
-         !ustar_tank = 0.03415 ! from table 1 of Sullivan et al. 2000 ak = 0.2
-         ustar_tank = 1.0 !At the moment, unsure of how to handle this, but don't want to mess up c_speed below
-      elseif(i_tank == 11) then ! Testing the DNS formulation (no-slip) by giving it a stationary, bumpy surface
-         open(lut,file='./emily_wave.dat')
+      elseif(i_tank == 11) then !7/12/18: Particle-laden monochromatic turbulence with ak=0.2
+         open(lut,file='./monochromatic_ak2.dat')
+         !wave_l and c_speed now in the params.in file!
          npts_t  = 1000
-         wave_l  = 1.0*0.01 !Must trick it so that the nondimensionalization process works below
-         c_speed = 0.0
          wave_k  = pi2/wave_l
-         ustar_tank = 1.0 !At the moment, unsure of how to handle this, but don't want to mess up c_speed below
       endif
 c
       do i=1,4
@@ -10769,12 +10780,13 @@ c
 c
 c ---------- change lengths to m from cm
 c
-      do i=1,npts_t
-         xx(i)      = xx(i)*0.01
-         zz_tank(i) = zz_tank(i)*0.01
-         us(i)      = us(i)
-         ws(i)      = ws(i)
-      enddo
+!Commenting out -- BANNER DATA IN CM, MONOCHROMATIC IN M!
+!      do i=1,npts_t
+!        xx(i)      = xx(i)*0.01
+!        zz_tank(i) = zz_tank(i)*0.01
+!        us(i)      = us(i)
+!        ws(i)      = ws(i)
+!     enddo
 c
 !Commenting out the nondimensionalizations:
 !      c_speed = c_speed/ustar_tank
@@ -11113,7 +11125,7 @@ c              more aggressive strategy to trigger turbulence
 c
 c     t1_st  = 0.85340788E+01 + 0.01 ! time from volume ub1020
 c
-      t1_st  =  0.01 ! time relative to t_zero set by i_move_step
+      t1_st  =  0.0 ! time relative to t_zero set by i_move_step
 c
 c     t1_st  = 100000.0 ! to make surface always flat for initialization
 c
@@ -11155,7 +11167,7 @@ c
 c     write(nprt,1013) sum
 c1013 format(' 1013: tank sum z = ',e15.6)
 c
-c     ampl_fac = 1.0
+      ampl_fac = 1.0
       do j=iys,iye
       do i=1,nnx
          u_orbit(i,j) = u_tank_i(i)*ampl_fac
@@ -17191,7 +17203,7 @@ c
          zv = ran2(iseed)*zl
          xp_init = (/xv,yv,zv/)
          call create_particle(xp_init,vp_init,Tp_init,radius_init,idx,
-     +       z_tank_i(1:nnx),xpart(1:nnx),y2part(1:nnx))
+     +       z_tank_i(1:nnx),xpart(1:nnx),y2part(1:nnx),0.0)
       end do
 
       partTsrc = 0.0
@@ -17225,13 +17237,19 @@ c
       tot_reintro = 0
       his_reintro = 0
 
+      !Recall that these are the bin centers
+      call set_binsdata(bins,histbins+2,numhistvars,0.0,10.0,1)  !Residence time
+      call set_binsdata(bins,histbins+2,numhistvars,0.0,1.0,2)  !wave-relative origin
+      call set_binsdata(bins,histbins+2,numhistvars,0.0,1.0,3)  !wave-relative death
+      call set_binsdata(bins,histbins+2,numhistvars,0.0,zl,4)  !max height
+
       !Initialize the linked list of particles:
       nullify(part,first_particle)
 
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
 
-      num_reals = 3*8 + 6
+      num_reals = 3*9 + 8
       
       blcts(1:3) = (/2,num_reals,2/)
       displs(1) = 0
@@ -17419,13 +17437,13 @@ c
       xmax = dx*(mxe)
 
       end subroutine set_bounds
-      subroutine create_particle(xp,vp,Tp,rad,idx,ztank,xles,y2)
+      subroutine create_particle(xp,vp,Tp,rad,idx,ztank,xles,y2,t_born)
       use particles
       use pars
       implicit none
 
       real :: xp(3),vp(3),Tp,hpart,rad,pi
-      real :: ztank(nnx),xles(nnx),y2(nnx)
+      real :: ztank(nnx),xles(nnx),y2(nnx),t_born
       integer :: idx,ix
 
       if (.NOT. associated(first_particle)) then
@@ -17467,6 +17485,9 @@ c
       part%procidx = myid
       part%radius = rad
       part%m_s = Sal/1000.0*4.0/3.0*pi*rad**3*rhow
+      part%xp_0(1:3) = part%xp(1:3)
+      part%t0 = t_born
+      part%zpmax = 0.0
       
       end subroutine create_particle
       subroutine save_particles
@@ -17558,10 +17579,6 @@ c
      +                   mpi_mode_rdonly,
      +                   mpi_info_null,fh,ierr)
 
-      !First read in the residual array:
-!      offset = 0
-!      call mpi_file_read_at_all(fh,offset,residual,rbins,
-!     +                      mpi_real8,istatus,ierr)
 
       !Read in the total number of particles:
       offset = 0
@@ -17674,6 +17691,7 @@ c
       end do
          
       !Apply bottom boundary conditions here since mesh will have moved from previous:
+      num_reintro = 0
       call particle_bcs_nonperiodic
 
       partcount_t = 0.0
@@ -17780,6 +17798,9 @@ c
              call get_zeta_algeb(a_decay,zl,hpart,part%xip(1:3))
          end if
 
+        !Keep track of max height particle reaches during lifetime
+        if (part%xip(3) .gt. part%zpmax) part%zpmax = part%xip(3)
+
 
         part => part%next
       end do
@@ -17791,7 +17812,7 @@ c
 
       !Enforce nonperiodic bcs (either elastic or destroying particles)
       !t_s = mpi_wtime()
-      !call particle_bcs_nonperiodic
+      call particle_bcs_nonperiodic
       !call mpi_barrier(mpi_comm_world,ierr)
       !t_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time bc_non:', t_f - t_s
@@ -17953,13 +17974,15 @@ c
       use particles
       use con_data
       use pars
+      use tank_pars
       implicit none
       real :: top,bot
+      real :: restime,beg_phase,end_phase
+      real :: t_bndy,wave_local
 
-      !Assumes domain goes from [0,xl),[0,yl),[0,zl]
-      !Also maintain the number of particles on each proc
 
-      num_reintro = 0
+      t_bndy = t_stage - t_zero
+
       part => first_particle
       do while (associated(part))
 
@@ -17974,6 +17997,42 @@ c
          part%vp(3) = -part%vp(3)
          part => part%next
       elseif (part%xip(3) .LT. bot) then
+
+         restime = t_stage - part%t0
+
+         !Need to know where the wave is relative to periodic box:
+         wave_local = mod(c_speed*(part%t0-t_zero),xl)
+         if (part%xp_0(1) .gt. wave_local) then
+         !Particle ahead of wave phase inside domain
+         beg_phase = mod(part%xp_0(1)-wave_local,wave_l)/wave_l
+         else
+         !Particle behind wave phase inside domain 
+         beg_phase = mod((part%xp_0(1)+xl)-wave_local,wave_l)/wave_l
+         end if
+
+
+         wave_local = mod(c_speed*t_bndy,xl)
+         if (part%xp(1) .gt. wave_local) then
+         end_phase = mod(part%xp(1)-wave_local,wave_l)/wave_l
+         else
+         end_phase = mod((part%xp(1)+xl)-wave_local,wave_l)/wave_l
+         end if
+
+         !write(*,'(a5,2e15.6)') 'loc:',beg_phase,end_phase
+         !write(*,'(a5,2e15.6)') 'res:',hist_restime,beg_phase
+
+
+         !JPDF of residence time and wave-relative origin
+         call add_histogram(bins(:,1),bins(:,2),hist_restime,
+     +    histbins+2,restime,beg_phase)
+
+         !JPDF of wave-relative origin and wave-relative end
+         call add_histogram(bins(:,2),bins(:,3),hist_locations,
+     +    histbins+2,beg_phase,end_phase)
+
+         !JPDF of wave-relative origin and max height
+         call add_histogram(bins(:,2),bins(:,4),hist_height,
+     +    histbins+2,beg_phase,part%zpmax)
 
          call destroy_particle
          num_reintro = num_reintro + 1
@@ -17994,8 +18053,10 @@ c
       include 'mpif.h'
 
       integer :: ierr,randproc,np,tmp_reintro,istage,ix
-      real :: xv,yv,zv,ran2,vinj
+      real :: xv,yv,zv,ran2,vinj,t_bndy,uorb,worb
       real :: xpart(nnx),y2part(nnx),yp1,ypn,ddx
+
+      t_bndy = t_stage - t_zero
 
       call mpi_allreduce(num_reintro,tmp_reintro,1,mpi_integer,mpi_sum,
      +       mpi_comm_world,ierr)
@@ -18029,12 +18090,16 @@ c
         yv = ran2(iseed)*(ymax-ymin) + ymin
 
         !Inject the particles upwards:
-        !get the initial vertical velocity:
-        vinj = ran2(iseed)*Vpmax
+        !Include local orbital velocity as well as a random component for ejection
+        !Specific to monochromatic waves, so must modify for arbitrary tank waves
+        uorb = waveslope*c_speed*cos(pi2/wave_l*(xv-c_speed*t_bndy))
+        worb = -waveslope*c_speed*sin(pi2/wave_l*(xv-c_speed*t_bndy))
+        vinj = worb + ran2(iseed)*Vpmax
         zv = 10.0*radius_init
 
-        call create_particle((/xv,yv,zv/),(/0.0,0.0,vinj/),300.0,
-     +       radius_init,2,z_tank_i(1:nnx),xpart(1:nnx),y2part(1:nnx))
+        call create_particle((/xv,yv,zv/),(/uorb,0.0,vinj/),300.0,
+     +   radius_init,2,z_tank_i(1:nnx),xpart(1:nnx),
+     +   y2part(1:nnx),t_stage)
 
        end if
       end do
@@ -19168,6 +19233,7 @@ c
       use pars
       use particles
       use con_data
+      use tank_pars
       implicit none
 
       character(48) :: label
@@ -19177,8 +19243,8 @@ c
 
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, ugcont, vgcont,
-     +         zi, zl, xl, yl, zw1, dpdx_con,
-     +         zo
+     +         zi, zl, xl, yl, zw1,
+     +         zo, ustar_tank, waveslope, c_speed, wave_l
 
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_ran
@@ -19219,3 +19285,209 @@ c
 
 
       end subroutine read_input_file
+
+c       =========== WRITE HISTOGRAMS ==========
+        subroutine write_histograms(istep)
+        use pars
+        use fields
+        use con_data
+        use con_stats
+        use particles
+        implicit none
+
+        include 'mpif.h'
+        integer :: i,j
+        integer :: ierr
+
+
+        integer,intent(in) :: istep
+        integer :: iblnk
+        integer :: num_entries
+
+        real :: sumbuf_restime(histbins+2,histbins+2)
+        real :: sumbuf_locations(histbins+2,histbins+2)
+        real :: sumbuf_height(histbins+2,histbins+2)
+
+
+        character*80 path_restime,path_locations,path_height
+
+        character cgrid*10, num*3,iblks*16, fformat*10
+
+
+
+c -------------- Collect all histogram from different processors
+        num_entries = (histbins+2)*(histbins+2)
+        call mpi_reduce(hist_restime,sumbuf_restime,num_entries,
+     +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+        call mpi_reduce(hist_locations,sumbuf_locations,num_entries,
+     +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+        call mpi_reduce(hist_height,sumbuf_height,num_entries,
+     +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+
+        if (myid==0) then
+
+c
+c --------------- build character strings for file name
+c
+        cgrid = '.le.'
+        write(num,'(i3.3)') itn
+
+        iblnk = index(path_histog,' ')
+        call blnk(iblks)
+        write(iblks(1:7),'(i7.7)') istep
+        iblks(8:8) = '_'
+        write(iblks(9:15),'(i7.7)') (istep+itape)
+        call blnk(path_sav_hist)
+
+
+        path_restime = path_histog(1:iblnk-1)//'/restime'//
+     +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
+        path_locations = path_histog(1:iblnk-1)//'/locations'//
+     +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
+        path_height = path_histog(1:iblnk-1)//'/height'//
+     +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
+
+c ---------------- save data 
+
+        write(num,'(i3.3)') histbins+2
+        fformat = '('//num//'e15.6)'
+        open (unit=900,file=path_restime,
+     +  form='formatted',access='sequential')
+
+        write(900,fformat),bins(:,1)
+        write(900,fformat),bins(:,2)
+
+        do i =1,histbins+2
+           write(900,fformat),sumbuf_restime(1:histbins+2,i)
+        end do
+
+
+        close(900)
+
+        open (unit=901,file=path_locations,
+     +  form='formatted',access='sequential')
+
+        write(901,fformat),bins(:,2)
+        write(901,fformat),bins(:,3)
+
+        do i =1,histbins+2
+           write(901,fformat),sumbuf_locations(1:histbins+2,i)
+        end do
+
+
+        close(901)
+
+
+        open (unit=902,file=path_height,
+     +  form='formatted',access='sequential')
+
+        write(902,fformat),bins(:,2)
+        write(902,fformat),bins(:,4)
+
+        do i =1,histbins+2
+           write(902,fformat),sumbuf_height(1:histbins+2,i)
+        end do
+
+
+        close(902)
+
+
+        end if
+
+        end subroutine write_histograms
+        subroutine set_binsdata(binsdata,sizea,numvars,lmin,lmax,idx)
+        use pars
+        use fields
+        use con_data
+        use con_stats
+        use particles
+        implicit none
+
+        integer :: i,nbin,ibin,nbinnew,idx
+        real :: dhl
+
+        integer,intent(in) :: sizea,numvars
+        real,intent(inout) :: binsdata(sizea,numvars)
+
+        real :: lmin,lmax
+
+        nbin = histbins !From Module Particle 
+
+
+c       Calculate size of interval
+        dhl = (lmax-lmin)/(nbin-1)
+
+c       ===== update x-axis for each bin ===== 
+        binsdata(1,idx) = lmin-dhl
+        do i = 1,histbins+1
+          binsdata(i+1,idx)= dhl+binsdata(i,idx)
+        end do
+
+        end subroutine set_binsdata
+        subroutine add_histogram(binsdata1,binsdata2,
+     +            histdata,sizea,val1,val2)
+
+        use pars
+        use fields
+        use con_data
+        use con_stats
+        use particles
+        implicit none
+
+        integer :: i,nbin,nbinnew
+        integer :: ibin(2)
+        real :: dht,dhl
+        real,intent(in) :: val1,val2
+c       real,intent(inout),dimension(:,:) :: histdata
+
+        integer,intent(in) :: sizea
+        real,intent(in) :: binsdata1(sizea),binsdata2(sizea)
+        real,intent(inout) :: histdata(sizea,sizea)
+
+        real :: tmin,lmin,tmax,lmax,logval1,logval2
+
+        tmin = binsdata1(2)
+        lmin = binsdata2(2)
+        nbin = histbins !From Module Particle 
+        tmax = binsdata1(nbin+1)
+        lmax = binsdata2(nbin+1)
+
+c       Calculate size of interval
+        dht = (tmax-tmin)/(nbin-1)
+        dhl = (lmax-lmin)/(nbin-1)
+c       Find corresponding bin of input data
+
+
+        if (val1 .gt. tmax+0.5*dht) then
+                ibin(1) = nbin + 2
+        else if (val1 .lt. tmin-0.5*dht) then
+                ibin(1) = 1
+        else
+                ibin(1) = (floor((val1-(tmin-0.5*dht))/dht)+1)+1
+        end if
+
+        if (val2 .gt. lmax+0.5*dhl) then
+                ibin(2) = nbin + 2
+        else if (val2 .lt. lmin-0.5*dhl) then
+                ibin(2) = 1
+        else
+                ibin(2) = (floor((val2-(lmin-0.5*dhl))/dhl)+1)+1
+        end if
+
+
+c       Add the current event to the histogram
+        histdata(ibin(1),ibin(2)) = histdata(ibin(1),ibin(2)) + 1.0
+
+        end subroutine add_histogram
+        subroutine clean_histograms
+        use pars
+        use fields
+        use con_data
+        use con_stats
+        use particles
+        hist_restime = 0
+        hist_locations = 0
+        hist_height = 0
+
+        end subroutine clean_histograms
