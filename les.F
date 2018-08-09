@@ -17810,6 +17810,9 @@ c
       !t_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time loop:', t_f-t_s
 
+      !Calculate particle fluxes before removing particles (to get lowest grid point correct)
+      call update_particle_flux
+
       !Enforce nonperiodic bcs (either elastic or destroying particles)
       !t_s = mpi_wtime()
       call particle_bcs_nonperiodic
@@ -19085,7 +19088,7 @@ c
 
       end subroutine particle_stats_U
 
-      subroutine update_particle_stats
+      subroutine update_particle_flux
 
       use particles
       use pars
@@ -19110,7 +19113,6 @@ c
 
 
       kUpt = floor((part%xip(3)-0.0)/dz_U) + 1
-      call particle_stats_U(ipt,jpt,kUpt)
 
       !Also compute particle flux statistics, which is slightly more
       !complicated:
@@ -19128,7 +19130,8 @@ c
          do iz=iz_beg,iz_end
 
             if (iz .lt. 1) then
-            write(*,*) 'up iz<1:',iz,part%xip(3),part%xip_i(3)
+            !write(*,*) 'up iz<1:',iz,part%xip(3),part%xip_i(3)
+            iz_beg = 1  !Calling this before particle_bcs_nonperiodic, so must account for when particles are below
             end if
             if (iz .gt. nnz) then
             write(*,*) 'up iz>nnz:',iz,part%xip(3),part%xip_i(3)
@@ -19145,7 +19148,8 @@ c
          do iz=iz_beg,iz_end
 
             if (iz .lt. 1) then
-            write(*,*) 'dn iz<1:',iz,part%xip(3),part%xip_i(3)
+            !write(*,*) 'dn iz<1:',iz,part%xip(3),part%xip_i(3)
+            iz_beg = 1
             end if
             if (iz .gt. nnz) then
             write(*,*) 'dn iz>nnz:',iz,part%xip(3),part%xip_i(3)
@@ -19156,6 +19160,40 @@ c
 
       end if
       end if
+
+
+      part => part%next
+      end do
+
+
+      end subroutine update_particle_flux
+
+      subroutine update_particle_stats
+
+      use particles
+      use pars
+      use con_data
+      use con_stats
+      implicit none
+      include 'mpif.h'
+      real :: rhop,taup_i,partmass
+      real :: xv,yv,zv
+      integer :: i,j,k,ncount,ipt,jpt,kpt,kwpt,kUpt
+      integer :: ix,iy,iz
+      real :: lref,Cvv,Cva,Cpv
+      real :: zu_1,zu_nnz
+      integer :: iz_beg,iz_end
+
+
+      part => first_particle
+      do while (associated(part))
+
+      ipt = floor(part%xp(1)/dx) + 1
+      jpt = floor(part%xp(2)/dy) + 1
+      kUpt = floor((part%xip(3)-0.0)/dz_U) + 1
+
+      call particle_stats_U(ipt,jpt,kUpt)
+
 
 
       !First, as done in uf_interp, must find the "leftmost" node
@@ -19416,7 +19454,7 @@ c ---------------- save data
 
 
 c       Calculate size of interval
-        dhl = (lmax-lmin)/(nbin-1)
+        dhl = (lmax-lmin)/nbin
 
 c       ===== update x-axis for each bin ===== 
         binsdata(1,idx) = lmin-dhl
@@ -19454,25 +19492,25 @@ c       real,intent(inout),dimension(:,:) :: histdata
         lmax = binsdata2(nbin+1)
 
 c       Calculate size of interval
-        dht = (tmax-tmin)/(nbin-1)
-        dhl = (lmax-lmin)/(nbin-1)
+        dht = (tmax-tmin)/nbin
+        dhl = (lmax-lmin)/nbin
 c       Find corresponding bin of input data
 
 
-        if (val1 .gt. tmax+0.5*dht) then
+        if (val1 .gt. tmax) then
                 ibin(1) = nbin + 2
-        else if (val1 .lt. tmin-0.5*dht) then
+        else if (val1 .lt. tmin) then
                 ibin(1) = 1
         else
-                ibin(1) = (floor((val1-(tmin-0.5*dht))/dht)+1)+1
+                ibin(1) = (floor((val1-tmin)/dht)+1)+1
         end if
 
-        if (val2 .gt. lmax+0.5*dhl) then
+        if (val2 .gt. lmax) then
                 ibin(2) = nbin + 2
-        else if (val2 .lt. lmin-0.5*dhl) then
+        else if (val2 .lt. lmin) then
                 ibin(2) = 1
         else
-                ibin(2) = (floor((val2-(lmin-0.5*dhl))/dhl)+1)+1
+                ibin(2) = (floor((val2-lmin)/dhl)+1)+1
         end if
 
 
