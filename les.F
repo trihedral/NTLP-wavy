@@ -10768,6 +10768,11 @@ c
          !wave_l and c_speed now in the params.in file!
          npts_t  = 1000
          wave_k  = pi2/wave_l
+      elseif(i_tank == 12) then !7/12/18: Particle-laden monochromatic turbulence with ak=0.2
+         open(lut,file='./flat.dat')
+         !wave_l and c_speed now in the params.in file!
+         npts_t  = 1000
+         wave_k  = pi2/wave_l
       endif
 c
       do i=1,4
