@@ -19131,12 +19131,16 @@ c
         iz_beg = floor((part%xip_i(3)-zu_1)/dz_U) + 2
         iz_end = floor((part%xip(3)-zu_1)/dz_U) + 1
 
+        !Calling this before particle_bcs_nonperiodic, so must account for when particles are below
+        if (iz_beg .lt. 1) then
+           iz_beg = 1
+        end if
+
 
          do iz=iz_beg,iz_end
 
             if (iz .lt. 1) then
-            !write(*,*) 'up iz<1:',iz,part%xip(3),part%xip_i(3)
-            iz_beg = 1  !Calling this before particle_bcs_nonperiodic, so must account for when particles are below
+            write(*,*) 'up iz<1:',iz,part%xip(3),part%xip_i(3)
             end if
             if (iz .gt. nnz) then
             write(*,*) 'up iz>nnz:',iz,part%xip(3),part%xip_i(3)
@@ -19153,8 +19157,7 @@ c
          do iz=iz_beg,iz_end
 
             if (iz .lt. 1) then
-            !write(*,*) 'dn iz<1:',iz,part%xip(3),part%xip_i(3)
-            iz_beg = 1
+            write(*,*) 'dn iz<1:',iz,part%xip(3),part%xip_i(3)
             end if
             if (iz .gt. nnz) then
             write(*,*) 'dn iz>nnz:',iz,part%xip(3),part%xip_i(3)
