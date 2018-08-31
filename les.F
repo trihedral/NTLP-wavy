@@ -26,8 +26,8 @@ c
 c -------- number of vars, size of problem in (x,y,z), max size, max processors
 c
          integer, parameter :: nscl = 2, nvar = (4+nscl)
-         integer, parameter :: nxg1  = 128, nyg1  = 128, nzg1  = 128
-         integer, parameter :: maxnx = 128, maxny = 128, maxnz = 128
+         integer, parameter :: nxg1  = 128, nyg1  = 128, nzg1 = 128
+         integer, parameter :: maxnx = 128, maxny = 128, maxnz =128
 
       !Boundary conditions and other parameters
       real :: Uo,Ttop(nscl),Tbot(nscl),qstar(nscl),tsfcc(nscl),RHbot
@@ -139,6 +139,8 @@ c ----------------------------------------------------------------------
       real, allocatable :: partcount(:,:,:),partsrc(:,:,:,:)
       real, allocatable :: partcountU_t(:,:,:),partcountU(:,:,:)
       real, allocatable :: partflux(:,:,:),partflux_t(:,:,:)
+      real, allocatable :: partfluxup(:,:,:),partfluxup_t(:,:,:)
+      real, allocatable :: partfluxdn(:,:,:),partfluxdn_t(:,:,:)
       real, allocatable :: vpsum(:,:,:,:),vpsqrsum(:,:,:,:)
       real, allocatable :: Tpsum(:,:,:),Tpsum_t(:,:,:)
       real, allocatable :: Tpsqrsum(:,:,:),Tpsqrsum_t(:,:,:)
@@ -362,7 +364,8 @@ c ----------------------------------------------------------------------
      +           upwpm(maxnz),
      +           Tpmean(maxnz),Tpmsqr(maxnz),wpTpm(maxnz),
      +           Tfmean(maxnz),qfmean(maxnz),radmean(maxnz),
-     +           rad2mean(maxnz),qstarmean(maxnz),pflux(maxnz)
+     +           rad2mean(maxnz),qstarmean(maxnz),pflux(maxnz),
+     +           pfluxup(maxnz),pfluxdn(maxnz)
         real ::  xkn(maxnx),ykn(maxny),
      +           xk(maxnx),yk(maxny),
      +           xkk(maxnx),ykk(maxny),
@@ -397,7 +400,8 @@ c ----------------------------------------------------------------------
      +           upwpm(:),
      +           Tpmean(:),Tpmsqr(:),wpTpm(:),
      +           Tfmean(:),qfmean(:),radmean(:),
-     +           rad2mean(:),qstarmean(:),pflux(:)
+     +           rad2mean(:),qstarmean(:),pflux(:),
+     +           pfluxup(:),pfluxdn(:)
         real, pointer ::  
      +           xkn(:), ykn(:), xk(:), yk(:), xkk(:), ykk(:),
      +           xks(:,:), wavexy(:,:)
@@ -486,6 +490,8 @@ c
              rad2mean => c_s%rad2mean; isize = isize + size(rad2mean)
              qstarmean => c_s%qstarmean; isize = isize + size(qstarmean)
              pflux => c_s%pflux; isize = isize + size(pflux)
+             pfluxup => c_s%pfluxup; isize = isize + size(pfluxup)
+             pfluxdn => c_s%pfluxdn; isize = isize + size(pfluxdn)
              xkn      => c_s%xkn
              ykn      => c_s%ykn
              xk       => c_s%xk
@@ -12837,6 +12843,10 @@ c
       partcountU_t = 0.0
       partflux = 0.0
       partflux_t = 0.0
+      partfluxup = 0.0
+      partfluxup_t = 0.0
+      partfluxdn = 0.0
+      partfluxdn_t = 0.0
       vpsum = 0.0
       vpsum_t = 0.0
       vpsqrsum = 0.0
@@ -14247,7 +14257,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      parameter(js = 35, ns = 6, nstat = js + ns*nscl)
+      parameter(js = 37, ns = 6, nstat = js + ns*nscl)
       real stat(1:nnz,nstat), buf(4)
 c
 c -------- stat(.,1) = u*u = ups
@@ -14285,6 +14295,8 @@ c          stat(.,32) = rad2sum
 c          stat(.,33) = qstarsum
 c          stat(.,34) = zconc_U
 c          stat(.,35) = pflux
+c          stat(.,36) = pfluxup
+c          stat(.,37) = pfluxdn
 c          stat(.,m1) = resolved scalar flux w_ft at zw = wtle
 c          stat(.,m2) = resolved scalar flux u_ft at zu = utle
 c          stat(.,m3) = resolved scalar flux v_ft at zu = vtle
@@ -14375,6 +14387,8 @@ c
          stat(k,33) = stat(k,33) + qstarsum(i,j,k)
          stat(k,34) = stat(k,34) + partcountU(i,j,k)
          stat(k,35) = stat(k,35) + partflux(i,j,k)
+         stat(k,36) = stat(k,36) + partfluxup(i,j,k)
+         stat(k,37) = stat(k,37) + partfluxdn(i,j,k)
       enddo
       enddo
 c
@@ -14489,6 +14503,8 @@ c
       rad2mean(k)   = stat(k,32)/stat(k,34)
       qstarmean(k)   = stat(k,33)/stat(k,34)
       pflux(k)   = stat(k,35)
+      pfluxup(k)   = stat(k,36)
+      pfluxdn(k)   = stat(k,37)
 
 c
 c ------------ get scalar resolved fluxes and variances
@@ -15107,6 +15123,10 @@ c
       allocate(partcountU_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(partflux(nnx,iys:iye,izs-1:ize+1))
       allocate(partflux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(partfluxup(nnx,iys:iye,izs-1:ize+1))
+      allocate(partfluxup_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(partfluxdn(nnx,iys:iye,izs-1:ize+1))
+      allocate(partfluxdn_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(upwp_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(upwp(nnx,iys:iye,izs-1:ize+1))
       allocate(vpsum(nnx,iys:iye,izs-1:ize+1,1:3))
@@ -17473,8 +17493,7 @@ c
       part%xp(3) = part%xip(3) + 
      +             hpart*(1.0-part%xip(3)/zl)**a_decay
 
-      part%xip_i(1:2) = part%xip(1:2)
-      part%xip_i(3) = 0.0
+      part%xip_i(1:3) = part%xip(1:3)
 
       part%vp(1:3) = vp(1:3)
       part%Tp = Tp
@@ -17701,7 +17720,11 @@ c
 
       partcount_t = 0.0
       partcountU_t = 0.0
-      partflux_t = 0.0
+      if (istage .eq. 1) then
+         partflux_t = 0.0
+         partfluxup_t = 0.0
+         partfluxdn_t = 0.0
+      end if
       vpsum_t = 0.0
       upwp_t = 0.0
       vpsqrsum_t = 0.0
@@ -17816,7 +17839,7 @@ c
       !if (myid==5) write(*,*) 'time loop:', t_f-t_s
 
       !Calculate particle fluxes before removing particles (to get lowest grid point correct)
-      call update_particle_flux
+      if (istage .eq. 3) call update_particle_flux
 
       !Enforce nonperiodic bcs (either elastic or destroying particles)
       !t_s = mpi_wtime()
@@ -17928,6 +17951,14 @@ c
      +                ncpu_s,numprocs)
       call ztox_trans(partflux_t(0:nnz+1,iys:iye,mxs:mxe),
      +                partflux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(partfluxup_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partfluxup(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(partfluxdn_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partfluxdn(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
@@ -18103,7 +18134,7 @@ c
         uorb = waveslope*c_speed*cos(pi2/wave_l*(xv-c_speed*t_bndy))
         worb = -waveslope*c_speed*sin(pi2/wave_l*(xv-c_speed*t_bndy))
         vinj = worb + ran2(iseed)*Vpmax
-        zv = 10.0*radius_init
+        zv = radius_init
 
         call create_particle((/xv,yv,zv/),(/uorb,0.0,vinj/),300.0,
      +   radius_init,2,z_tank_i(1:nnx),xpart(1:nnx),
@@ -19136,7 +19167,6 @@ c
            iz_beg = 1
         end if
 
-
          do iz=iz_beg,iz_end
 
             if (iz .lt. 1) then
@@ -19147,12 +19177,17 @@ c
             end if
 
             partflux_t(iz,jpt,ipt) = partflux_t(iz,jpt,ipt) + 1.0
+            partfluxup_t(iz,jpt,ipt) = partfluxup_t(iz,jpt,ipt) + 1.0
          end do
 
       elseif (part%xip_i(3) .gt. part%xip(3)) then  !Particle moved down
 
         iz_beg = floor((part%xip(3)-zu_1)/dz_U) + 2
         iz_end = floor((part%xip_i(3)-zu_1)/dz_U) + 1
+
+        if (iz_beg .lt. 1) then
+           iz_beg = 1
+        end if
 
          do iz=iz_beg,iz_end
 
@@ -19164,6 +19199,7 @@ c
             end if
 
             partflux_t(iz,jpt,ipt) = partflux_t(iz,jpt,ipt) - 1.0
+            partfluxdn_t(iz,jpt,ipt) = partfluxdn_t(iz,jpt,ipt) - 1.0
          end do
 
       end if
