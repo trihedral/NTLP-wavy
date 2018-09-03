@@ -1,15 +1,15 @@
 
 !Time step information
 &step_params
-iti=0          !Time step to begin
-itmax=30000  !Max number of time steps
+iti=0      !Time step to begin
+itmax=200000  !Max number of time steps
 imean=100    !Number of time steps between writing mean profiles to output log file
 ihst=10     !Number of time steps between writing profiles to history file
 itape=5000  !Number of time steps before opening new history file and writing full 3D volumes
 itstr=1
 it_his=1     !Time step to begin recording history files
 it_viz=1     !Time step to begin recording viz files
-iviz=10000   !Time steps between writing to viz file
+iviz=5000   !Time steps between writing to viz file
 itn = 0  !Index for "u.le.wav001" files
 /
 
@@ -22,7 +22,7 @@ iupwnd=1  ! 0 use skew-symmetric for derivatives in scalar equations; 1 use hybr
 iskew=1  ! 0 use skew symmetric form for advection in (u,v,w) eqns; 1 use hybrid upwind scheme for advection in momentum
 ibuoy=1  ! 0 no buoyancy term; 1 turn buoyancy on
 ifix_dt=0
-i_move_step=10
+i_move_step=0
 method=3
 iz_space=5  !Grid stretching options
 iflat=2  !0 flat lower (no press. iteration); 1 curvy lower boundary; 2 time-dependent lower boundary shape 
@@ -35,8 +35,8 @@ ispray = 1
 iDNS = 0
 isfc = 0, 1  !0 sets surface flux (qstar), 1 sets surface condition (tsfcc)
 ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
-ievap = 1
-i_tank = 7
+ievap = 0
+i_tank = 10 
 /
 
 !Grid and domain parameters
@@ -56,23 +56,26 @@ tsfcc = 300.0, 100.0    !Surface conditions of (temp, humidity) (used for LES) -
 ugcont = 1.0   !The initial u-velocity in the field
 vgcont = 0.0   !The initial v-velocity
 
-dpdx_con = 1.0  !The pressure gradient
+ustar_tank = 0.8835  !m/s -- sets the pressure gradient
+waveslope = 0.1      !dimensionless
+c_speed = 0.8835     !m/s
+wave_l = 0.5         !m
 
-zi = 1.0  !This has to do with grid stretching; make equal to zl for Couette/channel
-zl = 1.0 
-xl = 6.0  !2*pi*zl
-yl = 5.0  !2*pi*zl
+zi = 0.5  !This has to do with grid stretching; make equal to zl for Couette/channel
+zl = 0.5
+xl = 3.0
+yl = 2.5
 
-zw1 = 0.0042  !The first grid point
-zo = 10.0e-5  !Aerodynamic roughness
+zw1 = 0.00325   !The first grid point
+zo = 2.15e-4  !Aerodynamic roughness
 /
 
 !Set the paths for code I/O. Must be on the scratch directory, not AFS!
 &path_names
-path_seed="/scratch365/drichte2/NTLP-wavy/case1/"
-path_part="/scratch365/drichte2/NTLP-wavy/case1/part.le.wav000"
-path_res="/scratch365/drichte2/NTLP-wavy/case1/u.le.wav000"
-path_ran="/scratch365/drichte2/NTLP-wavy/case1/u.le.wav000"
+path_seed="/scratch365/drichte2/NTLP-wavy/wav1/"
+path_part="/scratch365/drichte2/NTLP-wavy/wav1/part.le.wav040"
+path_res="/scratch365/drichte2/NTLP-wavy/wav1/u.le.wav040"
+path_ran="/scratch365/drichte2/NTLP-wavy/wav1/u.le.wav000"
 /
 
 
@@ -83,7 +86,7 @@ t00 = 273.0 !Reference temp for buoyancy
 fcor = 0.0  !Coriolis parameter
 
 !Air properties:
-nuf = 0.000125  !Kinematic viscosity of air
+nuf = 1.57e-5  !Kinematic viscosity of air
 Pra = 0.71 !Prandtl number of air
 Sc = 0.61  !Schmidt number for humidity diffusivity
 Cpa = 1006.0  !J/kg-K
@@ -92,8 +95,8 @@ Cpa = 1006.0  !J/kg-K
 tnumpart = 5e5
 rhow=1000.0  !Density of water droplets
 rhoa = 1.0   !Density of air
-part_grav = 0.0, 0.0, 10.33
-Vpmax = 1.0
+part_grav = 0.0, 0.0, 9.81
+Vpmax = 5.0
 Cpp = 4179.0  !J/kg-K
 Mw = 0.018015  !kg/mol
 Ru = 8.3144
