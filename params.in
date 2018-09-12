@@ -37,6 +37,7 @@ isfc = 0, 1  !0 sets surface flux (qstar), 1 sets surface condition (tsfcc)
 ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 ievap = 0
 i_tank = 10 
+i_zeta = 1  !Do particle statistics correspond to zeta (i_zeta=1) or z (i_zeta=0) levels?
 /
 
 !Grid and domain parameters
@@ -60,6 +61,7 @@ ustar_tank = 0.8835  !m/s -- sets the pressure gradient
 waveslope = 0.1      !dimensionless
 c_speed = 0.8835     !m/s
 wave_l = 0.5         !m
+minwavez = 0.0     !m -- the minimum height to look for particles in z-domain
 
 zi = 0.5  !This has to do with grid stretching; make equal to zl for Couette/channel
 zl = 0.5

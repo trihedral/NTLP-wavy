@@ -11,7 +11,7 @@ c ----------------------------------------------------------------------
      + ivis0,ifix_dt,new_vis,iflat,
      + i3d_surf,i_pm,lpbc,k_stab,
      + no_pgrad,ispray,iDNS,
-     + ifields,ievap,i_tank
+     + ifields,ievap,i_tank,i_zeta
 
 c
 c -------- j_recl = record length in "bytes" for history file
@@ -26,8 +26,8 @@ c
 c -------- number of vars, size of problem in (x,y,z), max size, max processors
 c
          integer, parameter :: nscl = 2, nvar = (4+nscl)
-         integer, parameter :: nxg1  = 128, nyg1  = 128, nzg1 = 128
-         integer, parameter :: maxnx = 128, maxny = 128, maxnz =128
+         integer, parameter :: nxg1  = 64, nyg1  = 64, nzg1 = 64
+         integer, parameter :: maxnx = 64, maxny = 64, maxnz =64
 
       !Boundary conditions and other parameters
       real :: Uo,Ttop(nscl),Tbot(nscl),qstar(nscl),tsfcc(nscl),RHbot
@@ -175,7 +175,7 @@ c ----------------------------------------------------------------------
       integer :: pidx,procidx
       real :: vp(3),xp(3),xip(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s,Tf
       real :: Tprhs_L,radius,radrhs,qinf,qstar,m_s,xip_i(3),xp_0(3),t0
-      real :: zpmax
+      real :: zpmax,xp_i(3)
       type(particle), pointer :: prev,next
       end type particle
 
@@ -202,7 +202,7 @@ c
       integer, parameter ::
      +           nx_tank = 2000
 c
-      real :: wave_l, c_speed
+      real :: wave_l, c_speed, minwavez
 c
 c --------- data arrays
 c
@@ -17274,7 +17274,7 @@ c
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
 
-      num_reals = 3*9 + 8
+      num_reals = 3*10 + 8
       
       blcts(1:3) = (/2,num_reals,2/)
       displs(1) = 0
@@ -17494,6 +17494,7 @@ c
      +             hpart*(1.0-part%xip(3)/zl)**a_decay
 
       part%xip_i(1:3) = part%xip(1:3)
+      part%xp_i(1:3) = part%xp(1:3)
 
       part%vp(1:3) = vp(1:3)
       part%Tp = Tp
@@ -17810,7 +17811,11 @@ c
 
 
          !Update the particle properties
-         if (istage==1) part%xip_i(1:3) = part%xip(1:3)
+         if (istage==1) then
+             part%xip_i(1:3) = part%xip(1:3)
+             part%xp_i(1:3) = part%xp(1:3)
+         end if
+
          part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
          
          part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
@@ -18134,7 +18139,8 @@ c
         uorb = waveslope*c_speed*cos(pi2/wave_l*(xv-c_speed*t_bndy))
         worb = -waveslope*c_speed*sin(pi2/wave_l*(xv-c_speed*t_bndy))
         vinj = worb + ran2(iseed)*Vpmax
-        zv = radius_init
+        !zv = radius_init
+        zv = zw1
 
         call create_particle((/xv,yv,zv/),(/uorb,0.0,vinj/),300.0,
      +   radius_init,2,z_tank_i(1:nnx),xpart(1:nnx),
@@ -19130,6 +19136,7 @@ c
       use pars
       use con_data
       use con_stats
+      use tank_pars
       implicit none
       include 'mpif.h'
       real :: rhop,taup_i,partmass
@@ -19137,7 +19144,7 @@ c
       integer :: i,j,k,ncount,ipt,jpt,kpt,kwpt,kUpt
       integer :: ix,iy,iz
       real :: lref,Cvv,Cva,Cpv
-      real :: zu_1,zu_nnz
+      real :: zu_1,zu_nnz,ztocheck,ztocheck_i
       integer :: iz_beg,iz_end
 
 
@@ -19148,19 +19155,27 @@ c
       jpt = floor(part%xp(2)/dy) + 1
 
 
-      kUpt = floor((part%xip(3)-0.0)/dz_U) + 1
+      if (i_zeta .eq. 1) then  !Check fluxes according to zeta levels
+          ztocheck = part%xip(3)
+          ztocheck_i = part%xip_i(3)
+      elseif (i_zeta .eq. 0) then
+          ztocheck = part%xp(3)  !Check fluxes according to z-levels
+          ztocheck_i = part%xp_i(3)
+      end if
+
+      kUpt = floor((ztocheck-minwavez)/dz_U) + 1
 
       !Also compute particle flux statistics, which is slightly more
       !complicated:
-      zu_1 = 0.5*zl/nnz
-      zu_nnz = zl - zu_1
+      zu_1 = minwavez + 0.5*dz_U
+      zu_nnz = zl - 0.5*dz_U
 
-      if (part%xip_i(3) .gt. 0.0) then
+      if (ztocheck .gt. minwavez) then
       !Compute particle flux statistics based on the move:
-      if (part%xip_i(3) .lt. part%xip(3)) then  !Particle moved up
+      if (ztocheck_i .lt. ztocheck) then  !Particle moved up
 
-        iz_beg = floor((part%xip_i(3)-zu_1)/dz_U) + 2
-        iz_end = floor((part%xip(3)-zu_1)/dz_U) + 1
+        iz_beg = floor((ztocheck_i-zu_1)/dz_U) + 2
+        iz_end = floor((ztocheck-zu_1)/dz_U) + 1
 
         !Calling this before particle_bcs_nonperiodic, so must account for when particles are below
         if (iz_beg .lt. 1) then
@@ -19170,20 +19185,20 @@ c
          do iz=iz_beg,iz_end
 
             if (iz .lt. 1) then
-            write(*,*) 'up iz<1:',iz,part%xip(3),part%xip_i(3)
+            write(*,*) 'up iz<1:',iz,ztocheck,ztocheck_i
             end if
             if (iz .gt. nnz) then
-            write(*,*) 'up iz>nnz:',iz,part%xip(3),part%xip_i(3)
+            write(*,*) 'up iz>nnz:',iz,ztocheck,ztocheck_i
             end if
 
             partflux_t(iz,jpt,ipt) = partflux_t(iz,jpt,ipt) + 1.0
             partfluxup_t(iz,jpt,ipt) = partfluxup_t(iz,jpt,ipt) + 1.0
          end do
 
-      elseif (part%xip_i(3) .gt. part%xip(3)) then  !Particle moved down
+      elseif (ztocheck_i .gt. ztocheck) then  !Particle moved down
 
-        iz_beg = floor((part%xip(3)-zu_1)/dz_U) + 2
-        iz_end = floor((part%xip_i(3)-zu_1)/dz_U) + 1
+        iz_beg = floor((ztocheck-zu_1)/dz_U) + 2
+        iz_end = floor((ztocheck_i-zu_1)/dz_U) + 1
 
         if (iz_beg .lt. 1) then
            iz_beg = 1
@@ -19192,10 +19207,10 @@ c
          do iz=iz_beg,iz_end
 
             if (iz .lt. 1) then
-            write(*,*) 'dn iz<1:',iz,part%xip(3),part%xip_i(3)
+            write(*,*) 'dn iz<1:',iz,ztocheck,ztocheck_i
             end if
             if (iz .gt. nnz) then
-            write(*,*) 'dn iz>nnz:',iz,part%xip(3),part%xip_i(3)
+            write(*,*) 'dn iz>nnz:',iz,ztocheck,ztocheck_i
             end if
 
             partflux_t(iz,jpt,ipt) = partflux_t(iz,jpt,ipt) - 1.0
@@ -19218,6 +19233,7 @@ c
       use pars
       use con_data
       use con_stats
+      use tank_pars
       implicit none
       include 'mpif.h'
       real :: rhop,taup_i,partmass
@@ -19225,7 +19241,7 @@ c
       integer :: i,j,k,ncount,ipt,jpt,kpt,kwpt,kUpt
       integer :: ix,iy,iz
       real :: lref,Cvv,Cva,Cpv
-      real :: zu_1,zu_nnz
+      real :: zu_1,zu_nnz,ztocheck
       integer :: iz_beg,iz_end
 
 
@@ -19235,6 +19251,14 @@ c
       ipt = floor(part%xp(1)/dx) + 1
       jpt = floor(part%xp(2)/dy) + 1
       kUpt = floor((part%xip(3)-0.0)/dz_U) + 1
+
+      if (i_zeta .eq. 1) then  !particle stats according to zeta levels
+          ztocheck = part%xip(3)
+      elseif (i_zeta .eq. 0) then
+          ztocheck = part%xp(3)  !particle stats according to z-levels
+      end if
+
+      kUpt = floor((ztocheck-minwavez)/dz_U) + 1
 
       call particle_stats_U(ipt,jpt,kUpt)
 
@@ -19326,7 +19350,7 @@ c
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, ugcont, vgcont,
      +         zi, zl, xl, yl, zw1,
-     +         zo, ustar_tank, waveslope, c_speed, wave_l
+     +         zo, ustar_tank,waveslope,c_speed,wave_l,minwavez
 
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_ran
@@ -19334,7 +19358,8 @@ c
       namelist /flags/ iradup,ifilt,itcut,isubs,ibrcl,iocean,idebug,
      +         ivis0,new_vis,ismlt,ifree,iupwnd,iskew,ibuoy,ifix_dt,
      +         i_move_step,method,iz_space,iflat,i3d_surf,i_pm,lpbc,
-     +         k_stab,no_pgrad,ispray,iDNS,ifields,ievap,isfc,i_tank
+     +         k_stab,no_pgrad,ispray,iDNS,ifields,ievap,isfc,i_tank,
+     +         i_zeta
 
       namelist /constants/ grav, t00, fcor, tnumpart,
      +         radius_init,part_grav,Vpmax,nuf,Pra,Sc,
@@ -19363,7 +19388,7 @@ c
       if (myid==0) print constants
       CpaCpp = Cpa/Cpp
 
-      dz_U = (zl-0.0)/maxnz
+      dz_U = (zl-minwavez)/maxnz
 
 
       end subroutine read_input_file
