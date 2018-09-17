@@ -167,7 +167,8 @@ c ----------------------------------------------------------------------
       real :: hist_locations(histbins+2,histbins+2)
       real :: hist_restime(histbins+2,histbins+2)
       real :: hist_height(histbins+2,histbins+2)
-      real :: bins(histbins+2,4)  !residence time, wave-relative origin, wave-relative death, max height
+      real :: hist_momentum(histbins+2,histbins+2)
+      real :: bins(histbins+2,5)  !residence time, wave-relative origin, wave-relative death, max height
 
       
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
@@ -175,7 +176,7 @@ c ----------------------------------------------------------------------
       integer :: pidx,procidx
       real :: vp(3),xp(3),xip(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s,Tf
       real :: Tprhs_L,radius,radrhs,qinf,qstar,m_s,xip_i(3),xp_0(3),t0
-      real :: zpmax,xp_i(3)
+      real :: zpmax,xp_i(3),u0
       type(particle), pointer :: prev,next
       end type particle
 
@@ -17263,10 +17264,12 @@ c
       his_reintro = 0
 
       !Recall that these are the bin centers
-      call set_binsdata(bins,histbins+2,numhistvars,0.0,10.0,1)  !Residence time
+      call set_binsdata(bins,histbins+2,numhistvars,
+     +                  log10(0.001),log10(100.0),1)  !Residence time
       call set_binsdata(bins,histbins+2,numhistvars,0.0,1.0,2)  !wave-relative origin
       call set_binsdata(bins,histbins+2,numhistvars,0.0,1.0,3)  !wave-relative death
       call set_binsdata(bins,histbins+2,numhistvars,0.0,zl,4)  !max height
+      call set_binsdata(bins,histbins+2,numhistvars,-1.0,20.0,5)  !ufinal - u0
 
       !Initialize the linked list of particles:
       nullify(part,first_particle)
@@ -17274,7 +17277,7 @@ c
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
 
-      num_reals = 3*10 + 8
+      num_reals = 3*10 + 9
       
       blcts(1:3) = (/2,num_reals,2/)
       displs(1) = 0
@@ -17497,6 +17500,7 @@ c
       part%xp_i(1:3) = part%xp(1:3)
 
       part%vp(1:3) = vp(1:3)
+      part%u0 = vp(1)
       part%Tp = Tp
       part%Tf = Tp
       part%uf(1:3) = 0.0
@@ -18068,7 +18072,7 @@ c
 
          !JPDF of residence time and wave-relative origin
          call add_histogram(bins(:,1),bins(:,2),hist_restime,
-     +    histbins+2,restime,beg_phase)
+     +    histbins+2,log10(restime),beg_phase)
 
          !JPDF of wave-relative origin and wave-relative end
          call add_histogram(bins(:,2),bins(:,3),hist_locations,
@@ -18077,6 +18081,10 @@ c
          !JPDF of wave-relative origin and max height
          call add_histogram(bins(:,2),bins(:,4),hist_height,
      +    histbins+2,beg_phase,part%zpmax)
+
+         !JPDF of wave-relative origin and max height
+         call add_histogram(bins(:,2),bins(:,5),hist_momentum,
+     +    histbins+2,beg_phase,part%vp(1)-part%u0)
 
          call destroy_particle
          num_reintro = num_reintro + 1
@@ -19414,9 +19422,11 @@ c       =========== WRITE HISTOGRAMS ==========
         real :: sumbuf_restime(histbins+2,histbins+2)
         real :: sumbuf_locations(histbins+2,histbins+2)
         real :: sumbuf_height(histbins+2,histbins+2)
+        real :: sumbuf_momentum(histbins+2,histbins+2)
 
 
         character*80 path_restime,path_locations,path_height
+        character*80 path_momentum
 
         character cgrid*10, num*3,iblks*16, fformat*10
 
@@ -19429,6 +19439,8 @@ c -------------- Collect all histogram from different processors
         call mpi_reduce(hist_locations,sumbuf_locations,num_entries,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
         call mpi_reduce(hist_height,sumbuf_height,num_entries,
+     +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+        call mpi_reduce(hist_momentum,sumbuf_momentum,num_entries,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
 
@@ -19453,6 +19465,8 @@ c
         path_locations = path_histog(1:iblnk-1)//'/locations'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
         path_height = path_histog(1:iblnk-1)//'/height'//
+     +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
+        path_momentum = path_histog(1:iblnk-1)//'/momentum'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
 c ---------------- save data 
@@ -19500,6 +19514,18 @@ c ---------------- save data
         close(902)
 
 
+        open (unit=903,file=path_momentum,
+     +  form='formatted',access='sequential')
+
+        write(903,fformat),bins(:,2)
+        write(903,fformat),bins(:,5)
+
+        do i =1,histbins+2
+           write(903,fformat),sumbuf_momentum(1:histbins+2,i)
+        end do
+
+
+        close(903)
         end if
 
         end subroutine write_histograms
@@ -19552,7 +19578,7 @@ c       real,intent(inout),dimension(:,:) :: histdata
         real,intent(in) :: binsdata1(sizea),binsdata2(sizea)
         real,intent(inout) :: histdata(sizea,sizea)
 
-        real :: tmin,lmin,tmax,lmax,logval1,logval2
+        real :: tmin,lmin,tmax,lmax
 
         tmin = binsdata1(2)
         lmin = binsdata2(2)
@@ -19596,5 +19622,6 @@ c       Add the current event to the histogram
         hist_restime = 0
         hist_locations = 0
         hist_height = 0
+        hist_momentum = 0
 
         end subroutine clean_histograms
