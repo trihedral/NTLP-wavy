@@ -26,13 +26,17 @@ c
 c -------- number of vars, size of problem in (x,y,z), max size, max processors
 c
          integer, parameter :: nscl = 2, nvar = (4+nscl)
-         integer, parameter :: nxg1  = 64, nyg1  = 64, nzg1 = 64
-         integer, parameter :: maxnx = 64, maxny = 64, maxnz =64
+!         integer, parameter :: nxg1  = 256, nyg1  = 256, nzg1 = 128
+!         integer, parameter :: maxnx = 256, maxny = 256, maxnz = 128
+         integer, parameter :: nxg1  = 128, nyg1  = 128, nzg1 = 128
+         integer, parameter :: maxnx = 128, maxny = 128, maxnz = 128
+!         integer, parameter :: nxg1  = 64, nyg1  = 64, nzg1 = 64
+!         integer, parameter :: maxnx = 64, maxny = 64, maxnz = 64
 
       !Boundary conditions and other parameters
       real :: Uo,Ttop(nscl),Tbot(nscl),qstar(nscl),tsfcc(nscl),RHbot
       real :: ugcont,vgcont,fcor,t00,grav,ustar_tank,waveslope
-      real :: zi, zl, xl, yl, zw1, zo
+      real :: zi, zl, xl, yl, zw1, zo, dt_new
       integer :: isfc(nscl)
 
 c
@@ -252,7 +256,7 @@ c ----------------------------------------------------------------------
      +           batagk, batag, 
      +           cdbtm, dtdzf(nscl), dtjump, ugal, divgls,
      +           z1, utausv, dx, dy, dz, 
-     +           dt, dt1, dt_new,
+     +           dt, dt1,
      +           fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax,
      +           time, t_zero, zody, zody74, 
      +           utau, wtsfc(nscl),
@@ -266,7 +270,7 @@ c ----------------------------------------------------------------------
      +           batagk, batag,
      +           cdbtm, dtdzf(:), dtjump, ugal, divgls,
      +           z1, utausv, dx, dy, dz, 
-     +           dt, dt1, dt_new,
+     +           dt, dt1,
      +           fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax, 
      +           time, t_zero, zody, zody74, 
      +           utau, wtsfc(:), 
@@ -298,7 +302,6 @@ c
              dz     => c_c%dz
              dt     => c_c%dt
              dt1    => c_c%dt1
-             dt_new => c_c%dt_new
              fnxy   => c_c%fnxy
              dzdz   => c_c%dzdz
              dsl    => c_c%dsl
@@ -996,7 +999,7 @@ c
 c
 c ------------- if used, change to fit your problem
 c
-        dt_new = 0.0002
+c        dt_new = 0.000370099
       else
 c
 c ------------------- new estimate of best time step
@@ -1296,7 +1299,7 @@ c
 c
 c     cfl = 0.63
 c
-      cfl = 0.50
+c     cfl = 0.50
 c     cfl = 0.30
 c     cfl = 0.10
 c
@@ -19358,7 +19361,8 @@ c
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, ugcont, vgcont,
      +         zi, zl, xl, yl, zw1,
-     +         zo, ustar_tank,waveslope,c_speed,wave_l,minwavez
+     +         zo, ustar_tank,waveslope,c_speed,wave_l,minwavez,
+     +         dt_new,cfl
 
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_ran
