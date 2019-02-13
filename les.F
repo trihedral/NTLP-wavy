@@ -17267,8 +17267,12 @@ c
       his_reintro = 0
 
       !Recall that these are the bin centers
+      !Setting the dimensional maximum time:
+!      call set_binsdata(bins,histbins+2,numhistvars,
+!     +                  log10(0.001),log10(100.0),1)  !Residence time
+      !Setting the residence time based on NONDIMENSIONAL time
       call set_binsdata(bins,histbins+2,numhistvars,
-     +                  log10(0.001),log10(100.0),1)  !Residence time
+     +                  log10(0.001),log10(100.0*zl/ustar_tank),1)  !Residence time
       call set_binsdata(bins,histbins+2,numhistvars,0.0,1.0,2)  !wave-relative origin
       call set_binsdata(bins,histbins+2,numhistvars,0.0,1.0,3)  !wave-relative death
       call set_binsdata(bins,histbins+2,numhistvars,0.0,zl,4)  !max height
