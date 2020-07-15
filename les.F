@@ -166,7 +166,7 @@ c ----------------------------------------------------------------------
       real :: CpaCpp,Pra,Sc,Cpa,Cpp
       real :: Mw,Ru,Sal,Ms,Gam,Ion,Os
 
-      integer, parameter :: histbins = 256,numhistvars=4
+      integer, parameter :: histbins = 256,numhistvars=5
       integer :: hist_flag=0
       real :: hist_locations(histbins+2,histbins+2)
       real :: hist_restime(histbins+2,histbins+2)
@@ -19206,8 +19206,8 @@ c
             write(*,*) 'up iz>nnz:',iz,ztocheck,ztocheck_i
             end if
 
-            partflux_t(iz,jpt,ipt) = partflux_t(iz,jpt,ipt) + 1.0
-            partfluxup_t(iz,jpt,ipt) = partfluxup_t(iz,jpt,ipt) + 1.0
+            !partflux_t(iz,jpt,ipt) = partflux_t(iz,jpt,ipt) + 1.0
+            !partfluxup_t(iz,jpt,ipt) = partfluxup_t(iz,jpt,ipt) + 1.0
          end do
 
       elseif (ztocheck_i .gt. ztocheck) then  !Particle moved down
@@ -19228,8 +19228,8 @@ c
             write(*,*) 'dn iz>nnz:',iz,ztocheck,ztocheck_i
             end if
 
-            partflux_t(iz,jpt,ipt) = partflux_t(iz,jpt,ipt) - 1.0
-            partfluxdn_t(iz,jpt,ipt) = partfluxdn_t(iz,jpt,ipt) - 1.0
+            !partflux_t(iz,jpt,ipt) = partflux_t(iz,jpt,ipt) - 1.0
+            !partfluxdn_t(iz,jpt,ipt) = partfluxdn_t(iz,jpt,ipt) - 1.0
          end do
 
       end if
