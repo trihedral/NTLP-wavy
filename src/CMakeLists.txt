@@ -17,11 +17,15 @@ set (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS_RELEASE} -i4 -r8 -g -tra
 
 # Build Library
 add_library (fft STATIC "fft.f")
+add_library (modules_les STATIC "modules.F")
+add_library (subroutines_les STATIC "subroutines.F")
+add_library (particleSubs_les STATIC "particleSubs.F")
+add_library (ioSubs_les STATIC "ioSubs.F")
 
 # Build Executable
 set_source_files_properties( "les.F" COMPILE_FLAGS "-assume byterecl")
 
 add_executable (lesmpi.a "les.F")
-target_link_libraries (lesmpi.a fft)
+target_link_libraries (lesmpi.a modules_les particleSubs_les ioSubs_les subroutines_les fft) # list in order of dependence
 
 install ( TARGETS lesmpi.a RUNTIME DESTINATION "bin")
