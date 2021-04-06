@@ -37,7 +37,7 @@
       do ix=1,nnx
          xpart(ix) = float(ix-1)*ddx
       end do
-      call spline(xpart,z_tank_i,nnx,yp1,ypn,y2part)
+      ! call spline(xpart,z_tank_i,nnx,yp1,ypn,y2part)
 
       !Now initialize all particles with a random location on that processor
       do idx=1,numpart
@@ -312,7 +312,8 @@
       pi   = 4.0*atan(1.0)
 
       part%xip(1:3) = xp(1:3)
-      call splint(xles,ztank,y2,nnx,part%xip(1),hpart)
+      ! call splint(xles,ztank,y2,nnx,part%xip(1),hpart)
+      call linInterp(xles,ztank,nnx,part%xip(1),hpart)
       part%xp(1:2) = part%xip(1:2)
       part%xp(3) = part%xip(3) +
      +             hpart*(1.0-part%xip(3)/zl)**a_decay
@@ -526,13 +527,14 @@
       do ix=1,nnx
          xpart(ix) = float(ix-1)*ddx
       end do
-      call spline(xpart,z_tank_i,nnx,yp1,ypn,y2part)
+      ! call spline(xpart,z_tank_i,nnx,yp1,ypn,y2part)
 
       !update xip since waves have moved since last particle
       part => first_particle
       do while (associated(part))
             !Update part%xip
-            call splint(xpart,z_tank_i,y2part,nnx,part%xp(1),hpart)
+            ! call splint(xpart,z_tank_i,y2part,nnx,part%xp(1),hpart)
+            call linInterp(xpart,z_tank_i,nnx,part%xp(1),hpart)
             part%xip(1:3) = part%xp(1:3)
             if (iz_space == 5) then    !Algebraic stretching to smooth out waves
                 call get_zeta_algeb(a_decay,zl,hpart,part%xip(1:3))
@@ -574,7 +576,8 @@
          !First, interpolate to get the fluid velocity part%uf(1:3):
          !For wavy code, must pass in the wave height at particle location
          !Get this from spline:
-         call splint(xpart,z_tank_i,y2part,nnx,part%xp(1),hpart)
+         ! call splint(xpart,z_tank_i,y2part,nnx,part%xp(1),hpart)
+         call linInterp(xpart,z_tank_i,nnx,part%xp(1),hpart)
 
          call uf_interp(hpart)
 
@@ -643,14 +646,19 @@
 
          part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
 
-         part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
+         if (i_pinertia==1) then
+           part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
+         else
+           part%vp = part%uf - part_grav/taup_i
+         end if
          part%Tp = Tptmp + dt*gama(istage)*part%Tprhs_s
          part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
          part%radius = radiustmp + dt*gama(istage)*part%radrhs
 
 
          !Update part%xip as well:
-         call splint(xpart,z_tank_i,y2part,nnx,part%xp(1),hpart)
+         ! call splint(xpart,z_tank_i,y2part,nnx,part%xp(1),hpart)
+         call linInterp(xpart,z_tank_i,nnx,part%xp(1),hpart)
          part%xip(1:3) = part%xp(1:3)
          if (iz_space == 5) then    !Algebraic stretching to smooth out waves
              call get_zeta_algeb(a_decay,zl,hpart,part%xip(1:3))
@@ -928,6 +936,7 @@
       integer :: ierr,randproc,np,tmp_reintro,istage,ix
       real :: xv,yv,zv,ran2,vinj,t_bndy,uorb,worb
       real :: xpart(nnx),y2part(nnx),yp1,ypn,ddx
+      real :: u2part(nnx),w2part(nnx)
 
       t_bndy = t_stage - t_zero
 
@@ -938,14 +947,15 @@
 
       tot_reintro = tot_reintro + tmp_reintro
 
-      !Set up xpart for interpolation of h:
+      !Set up xpart for interpolation of orbital speeds:
       yp1 = 2.0e+30
       ypn = yp1
       ddx = xl/float(nnx)
       do ix=1,nnx
          xpart(ix) = float(ix-1)*ddx
       end do
-      call spline(xpart,z_tank_i,nnx,yp1,ypn,y2part)
+      ! call spline(xpart,u_tank_i,nnx,yp1,ypn,u2part)
+      ! call spline(xpart,w_tank_i,nnx,yp1,ypn,w2part)
 
       !Now everyone knows how many total particles need to be reintroduced
       !For each one to be reintroduced, get a random processor who creates it:
@@ -964,9 +974,11 @@
 
         !Inject the particles upwards:
         !Include local orbital velocity as well as a random component for ejection
-        !Specific to monochromatic waves, so must modify for arbitrary tank waves
-        uorb = waveslope*c_speed*cos(pi2/wave_l*(xv-c_speed*t_bndy))
-        worb = -waveslope*c_speed*sin(pi2/wave_l*(xv-c_speed*t_bndy))
+        ! uorb = waveslope*c_speed*cos(pi2/wave_l*(xv-c_speed*t_bndy))
+        ! worb = -waveslope*c_speed*sin(pi2/wave_l*(xv-c_speed*t_bndy))
+        call linInterp(xpart,u_tank_i,nnx,xv,uorb)
+        call linInterp(xpart,w_tank_i,nnx,xv,worb)
+
         vinj = worb + ran2(iseed)*Vpmax
         !zv = radius_init
         zv = zw1
@@ -2123,7 +2135,7 @@
 
 !---------
 
-      part => part%next 
+      part => part%next
       end do
 
 

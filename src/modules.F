@@ -11,7 +11,8 @@ c ----------------------------------------------------------------------
      + ivis0,ifix_dt,new_vis,iflat,
      + i3d_surf,i_pm,lpbc,k_stab,
      + no_pgrad,ispray,iDNS,
-     + ifields,ievap,i_tank,i_zeta
+     + ifields,ievap,i_tank,i_zeta,
+     + inetcdf,i_pinertia
 
 c
 c -------- j_recl = record length in "bytes" for history file

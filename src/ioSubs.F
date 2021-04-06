@@ -25,7 +25,7 @@
      +         ivis0,new_vis,ismlt,ifree,iupwnd,iskew,ibuoy,ifix_dt,
      +         i_move_step,method,iz_space,iflat,i3d_surf,i_pm,lpbc,
      +         k_stab,no_pgrad,ispray,iDNS,ifields,ievap,isfc,i_tank,
-     +         i_zeta
+     +         i_zeta,inetcdf,i_pinertia
 
       namelist /constants/ grav, t00, fcor, tnumpart,
      +         radius_init,part_grav,Vpmax,nuf,Pra,Sc,

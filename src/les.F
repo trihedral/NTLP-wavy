@@ -5,6 +5,7 @@ c
       use particles
       use con_data
       use con_stats
+      use netcdf_io
       include 'mpif.h'
 c
 c ------------- definition of internal flags
@@ -143,6 +144,9 @@ c
          call init
          call setup(it)
          call mesh
+         if (inetcdf .eq. 1) then
+         call netcdf_init
+         end if
 
          if (ispray==1) then
             call particle_setup
@@ -343,8 +347,13 @@ c
           if(l_root) call print(6,it,1,nnz)
       endif
       if(l_root) then
-         if(mhis  .and. istage .eq. 1)  call write_his(itop)
-         if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
+         if (inetcdf .eq. 1) then
+            if(mhis  .and. istage .eq. 1)  call write_his_netcdf
+         if(mhis  .and. istage .eq. 1 .and. mtape) call close_his_netcdf
+         else
+            if(mhis  .and. istage .eq. 1)  call write_his(itop)
+            if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
+         end if
       endif
  8999 continue
       call get_max

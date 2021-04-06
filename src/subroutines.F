@@ -8270,12 +8270,13 @@ c
 c
       return
       end
-      subroutine gal_interp(f,trigx,nnx,xk,dx,fi)
+      subroutine gal_interp(f,trigx,nnx,xk,tb,grav,fi)
+
 c
 c ---------- propagate array f forward in space by distance dx
 c            input is fourier coefficients in fftpack order
 c
-      real f(nnx), trigx(15+4*nnx), fi(nnx), xk(nnx)
+      real f(nnx), trigx(15+4*nnx), fi(nnx), xk(nnx), c_wav
 c
       ncx = nnx/2 + 1
 c
@@ -8287,14 +8288,16 @@ c
       kk    = 1
       do i=2,nnx-1,2
          kk = kk + 1
-         cc = cos(xk(kk)*dx)
-         ss = sin(xk(kk)*dx)
+         c_wav  = sqrt(grav/xk(i))
+         if(i.gt.ncx) c_wav = sqrt(-grav/xk(i))
+         cc = cos(xk(kk)*-c_wav*tb)
+         ss = sin(xk(kk)*-c_wav*tb)
          aa = f(i)
          bb = f(i+1)
          fi(i)   = aa*cc - bb*ss
          fi(i+1) = bb*cc + aa*ss
       enddo
-      cc      = cos(xk(ncx)*dx)
+      cc      = cos(xk(ncx)*-c_wav*tb)
       ss      = 0.0
       aa      = f(nnx)
       fi(nnx) = aa*cc
@@ -8305,27 +8308,27 @@ c
 c
       return
       end
-      subroutine hdot_interp(f,trigx,nnx,xk,dx,cs,fi)
+      subroutine hdot_interp(f,trigx,nnx,xk,tb,grav,fi)
 c
 c ----------- get hdot assuming packet moves with speed cs
 c
-      real f(nnx), trigx(15+4*nnx), fi(nnx), xk(nnx)
+      real f(nnx), trigx(15+4*nnx), fi(nnx), xk(nnx), c_wav
 c
       ncx = nnx/2 + 1
 c
 c --------- generate modified fourier coefficients
 c
-c     uu    = -cs
-      uu    = cs
       fi(1) = 0.0
       kk    = 1
       do i=2,nnx-1,2
          kk = kk + 1
-         uk = xk(kk)*uu
-         cc = cos(xk(kk)*dx)
-         ss = sin(xk(kk)*dx)
+         c_wav  = sqrt(grav/xk(i))
+         if(i.gt.ncx) c_wav = sqrt(-grav/xk(i))
+         cc = cos(xk(kk)*-c_wav*tb)
+         ss = sin(xk(kk)*-c_wav*tb)
          aa = f(i)
          bb = f(i+1)
+         uk = xk(kk)*c_wav
          fi(i)     = uk*(aa*ss + bb*cc)
          fi(i+1)   = uk*(bb*ss - aa*cc)
       enddo
@@ -9882,18 +9885,19 @@ c
          ustar_tank = 0.4928 ! from table 2 of banner 1990
       elseif(i_tank == 10) then !7/12/18: Particle-laden monochromatic turbulence
          open(lut,file='./monochromatic.dat')
-         !wave_l and c_speed now in the params.in file!
          npts_t  = 1000
          wave_k  = pi2/wave_l
       elseif(i_tank == 11) then !7/12/18: Particle-laden monochromatic turbulence with ak=0.2
          open(lut,file='./monochromatic_ak2.dat')
-         !wave_l and c_speed now in the params.in file!
          npts_t  = 1000
          wave_k  = pi2/wave_l
       elseif(i_tank == 12) then !7/12/18: Particle-laden monochromatic turbulence with ak=0.2
          open(lut,file='./flat.dat')
-         !wave_l and c_speed now in the params.in file!
          npts_t  = 1000
+         wave_k  = pi2/wave_l
+      elseif(i_tank == 13) then !7/12/18: Particle-laden real wave
+         open(lut,file='./polychromatic.dat')
+         npts_t  = maxnx
          wave_k  = pi2/wave_l
       endif
 c
@@ -9930,18 +9934,21 @@ c ---------- fit a spline to the data
 c
       yp1 = 2.0e+30
       ypn = yp1
-      call spline(xx,zz_tank,npts_t,yp1,ypn,y2)
-      call spline(xx,us,npts_t,yp1,ypn,u2)
-      call spline(xx,ws,npts_t,yp1,ypn,w2)
+      ! call spline(xx,zz_tank,npts_t,yp1,ypn,y2)
+      ! call spline(xx,us,npts_t,yp1,ypn,u2)
+      ! call spline(xx,ws,npts_t,yp1,ypn,w2)
 c
 c ---------- interpolate into the spline function at les points
 c
       ddx = xl/float(nnx)
       do i=1,nnx
          xles(i) = float(i-1)*ddx
-         call splint(xx,zz_tank,y2,npts_t,xles(i),z_tank(i))
-         call splint(xx,us,u2,npts_t,xles(i),u_tank(i))
-         call splint(xx,ws,w2,npts_t,xles(i),w_tank(i))
+         ! call splint(xx,zz_tank,y2,npts_t,xles(i),z_tank(i))
+         ! call splint(xx,us,u2,npts_t,xles(i),u_tank(i))
+         ! call splint(xx,ws,w2,npts_t,xles(i),w_tank(i))
+         z_tank(i) = zz_tank(i)
+         u_tank(i) = us(i)
+         w_tank(i) = ws(i)
       enddo
 c
 c     write(nprt,4002) (xx(i),zz_tank(i),i=1,npts_t)
@@ -10233,8 +10240,7 @@ c
       subroutine get_surf_tank(t_bndy)
 c
 c ------- generate new surface at t = t_bndy
-c         for the laboratory wave. Assume the shape moves
-c         with uniform phase speed. Build w_o and hdot so
+c         for the laboratory wave. Build w_o and hdot so
 c         that they satisfy the inputs for u_o and h
 c         with fix sr. hx_deriv
 c
@@ -10275,11 +10281,13 @@ c
 c ------------ get (u,w) components of surface velocity and wave
 c              height. Make h, hdot, uo, wo match
 c
-      dist = -c_speed*t_bndy
-c     dist = 0.0
-      call gal_interp(u_tank_f,trigx(1,1),nnx,xkn,dist,u_tank_i)
-      call gal_interp(z_tank_f,trigx(1,1),nnx,xkn,dist,z_tank_i)
-      call hdot_interp(z_tank_f,trigx(1,1),nnx,xkn,dist,c_speed,hdot_i)
+c     dist = -c_speed*t_bndy
+c     dist = 0
+      call gal_interp(u_tank_f,trigx(1,1),nnx,xkn,t_bndy,grav,u_tank_i)
+      !call gal_interp(w_tank_f,trigx(1,1),nnx,xkn,t_bndy,grav,w_tank_i)
+      call gal_interp(z_tank_f,trigx(1,1),nnx,xkn,t_bndy,grav,z_tank_i)
+      call hdot_interp(z_tank_f,trigx(1,1),nnx,xkn,t_bndy,grav,
+     +    hdot_i)
       call hx_deriv(z_tank_i,trigx(1,1),xkn,nnx,hx_i)
 c
 c     write(nprt,1012) c_speed, t_bndy
@@ -12962,6 +12970,7 @@ c
       use fields
       use con_data
       use con_stats
+      use netcdf_io
 c
       data ionce /0/
       save ionce
@@ -13015,7 +13024,11 @@ c
 c --------- decide whether history files are to be saved
 c
       if((ihst .gt. 0) .and. (it .ge. it_his_nxt)) then
-         call open_his(it)
+         if (inetcdf .eq. 1) then
+            call open_his_netcdf
+         else
+            call open_his(it)
+         end if
          it_his_nxt = it_his_nxt + itape
       endif
 c
@@ -16331,3 +16344,19 @@ c
       ran2=min(AM*iy,RNMX)
       return
       end function ran2
+
+      subroutine linInterp(xa,ya,n,x,y)
+      integer n
+      real x, xper, y, xa(n), ya(n)
+      integer i1, i2
+      xper = x
+      if (xper .ge. xa(n)) then
+        xper = xper-xa(n)
+      else if (xper < 0) then
+        xper = xa(n)+xper
+      endif
+      i1 = floor((n-1)*xper/xa(n)) + 1
+      i2 = i1+1
+      y = ya(i1) + (xper-xa(i1))*(ya(i2)-ya(i1))/(xa(i2)-xa(i1))
+      return
+      end
