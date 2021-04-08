@@ -1,0 +1,17 @@
+/*
+!README.md
+!.gitignore
+
+!src
+src/*
+!src/*.F
+!src/*.f
+!src/*.f90
+!src/CMakeLists.txt
+
+!InputExamples
+
+!build
+build/*
+!build/Makefile
+
