@@ -1,16 +1,18 @@
+# Ignore anything extra in root to prevent pushing run folders, etc
 /*
+
+# Don't ignore:
 !README.md
 !.gitignore
+!copyRun
+!.copyRun.py
 
+# Don't ignore anything inside:
 !src
-src/*
-!src/*.F
-!src/*.f
-!src/*.f90
-!src/CMakeLists.txt
+!ExRun_Mono
+!ExRun_Real
 
-!InputExamples
-
+# Ignore everything but Makefile in build
 !build
 build/*
 !build/Makefile
