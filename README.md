@@ -14,8 +14,8 @@ make
 
 You can use the copyRun script to create new runs based on the files and
 parameters of an old run.  The script automatically updates locations in
-params.in and the job name in les.run.  The command syntax is:  
-```shell
+params.in and the job name in les.run.  The command syntax is:
+```
 ./copyRun oldRun newRun  
 ```
 
