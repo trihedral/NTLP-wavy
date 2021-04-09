@@ -16,10 +16,8 @@ cd ../
 
 You can use the copyRun script to create new runs based on the files and
 parameters of an old run.  The script automatically updates locations in
-params.in and the job name in les.run.  The command syntax is: ./copyRun
-oldRun newRun  
-
-For example, to start setting up your first run, try:  
+params.in and the job name in les.run.  The command syntax is ``` ./copyRun
+oldRun newRun ``` For example, to start setting up your first run, try:  
 
 ---
 ./copyRun ExRun_Mono run1  
@@ -30,7 +28,7 @@ Finally, navigate to the newly created run1 directory and queue the run with:
 
 ---
 cd run1  
-./les.run  
+qsub les.run  
 
 ---
 
