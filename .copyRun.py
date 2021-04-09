@@ -18,7 +18,7 @@ def setPath(text, var, path):
     j = text.find('\"', i)
     j = text[i:j].rfind('/') + i
     return text[:i] + dir+path + text[j:]
-
+        
 def setProcName(text, name):
     var = "#$ -N "
     i = text.find(var)+len(var)
