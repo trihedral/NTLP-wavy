@@ -12,7 +12,7 @@
 !ExRun_Mono
 !ExRun_Real
 
-# Ignore everything but Makefile in build
+# Ignore everything but Makefile in build to prevent pushing build files
 !build
 build/*
 !build/Makefile

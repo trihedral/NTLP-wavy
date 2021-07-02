@@ -167,13 +167,14 @@ c ----------------------------------------------------------------------
       real :: CpaCpp,Pra,Sc,Cpa,Cpp
       real :: Mw,Ru,Sal,Ms,Gam,Ion,Os
 
-      integer, parameter :: histbins = 256,numhistvars=5
+      integer, parameter :: histbins = 256,numhistvars=6
       integer :: hist_flag=0
       real :: hist_locations(histbins+2,histbins+2)
       real :: hist_restime(histbins+2,histbins+2)
       real :: hist_height(histbins+2,histbins+2)
       real :: hist_momentum(histbins+2,histbins+2)
-      real :: bins(histbins+2,5)  !residence time, wave-relative origin, wave-relative death, max height
+      real :: hist_slopes(histbins+2,histbins+2)
+      real :: bins(histbins+2,6)  !residence time, wave-relative origin, wave-relative death, max height
 
 
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!

@@ -334,7 +334,7 @@ c -------- update particles
 c
       if (ispray==1) then
          !t_s = mpi_wtime()
-         call particle_update_rk3(it,istage)
+         call particle_update_rk3(it,istage) 
          !t_f = mpi_wtime()
          !call mpi_barrier(mpi_comm_world,ierr)
          !if (myid==5) write(*,*) 'time part: ',t_f-t_s

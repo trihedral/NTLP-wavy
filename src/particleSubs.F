@@ -66,7 +66,7 @@
       integer :: ierr
       integer(kind=MPI_ADDRESS_KIND) :: extent,lb
       integer(kind=MPI_ADDRESS_KIND) :: extent2,lb2,displs(3)
-      real :: ddx
+      real :: ddx, pi
       integer :: ix
       integer :: num_reals
 
@@ -79,6 +79,7 @@
       num_reintro = 0
       tot_reintro = 0
       his_reintro = 0
+      pi = 4.0*atan(1.0)
 
       !Recall that these are the bin centers
       !Setting the dimensional maximum time:
@@ -89,8 +90,9 @@
      +                  log10(0.001),log10(100.0*zl/ustar_tank),1)  !Residence time
       call set_binsdata(bins,histbins+2,numhistvars,0.0,1.0,2)  !wave-relative origin
       call set_binsdata(bins,histbins+2,numhistvars,0.0,1.0,3)  !wave-relative death
-      call set_binsdata(bins,histbins+2,numhistvars,0.0,zl,4)  !max height
+      call set_binsdata(bins,histbins+2,numhistvars,0.0,zl,4)   !max height
       call set_binsdata(bins,histbins+2,numhistvars,-1.0,20.0,5)  !ufinal - u0
+      call set_binsdata(bins,histbins+2,numhistvars,-pi,pi,6)  !birth slope angle
 
       !Initialize the linked list of particles:
       nullify(part,first_particle)
@@ -853,12 +855,19 @@
       use pars
       use tank_pars
       implicit none
-      real :: top,bot
+      integer :: ix
+      real :: top,bot,xpart(nnx),ddx
       real :: restime,beg_phase,end_phase
-      real :: t_bndy,wave_local
+      real :: t_bndy,wave_local,wave_slope
 
 
       t_bndy = t_stage - t_zero
+
+
+      ddx = xl/float(nnx)
+      do ix=1,nnx
+         xpart(ix) = float(ix-1)*ddx
+      end do
 
       part => first_particle
       do while (associated(part))
@@ -887,6 +896,9 @@
          beg_phase = mod((part%xp_0(1)+xl)-wave_local,wave_l)/wave_l
          end if
 
+         call linInterpSlope(xpart,z_tank_i,nnx,part%xp(1),wave_slope)
+         wave_slope = atan(wave_slope)
+
 
          wave_local = mod(c_speed*t_bndy,xl)
          if (part%xp(1) .gt. wave_local) then
@@ -914,6 +926,10 @@
          !JPDF of wave-relative origin and max height
          call add_histogram(bins(:,2),bins(:,5),hist_momentum,
      +    histbins+2,beg_phase,part%vp(1)-part%u0)
+
+         !JPDF of residence time and wave slope at origin
+         call add_histogram(bins(:,1),bins(:,6),hist_slopes,
+     +    histbins+2,log10(restime),wave_slope)
 
          call destroy_particle
          num_reintro = num_reintro + 1

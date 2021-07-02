@@ -81,10 +81,11 @@ c       =========== WRITE HISTOGRAMS ==========
         real :: sumbuf_locations(histbins+2,histbins+2)
         real :: sumbuf_height(histbins+2,histbins+2)
         real :: sumbuf_momentum(histbins+2,histbins+2)
+        real :: sumbuf_slopes(histbins+2,histbins+2)
 
 
         character*80 path_restime,path_locations,path_height
-        character*80 path_momentum
+        character*80 path_momentum, path_slopes
 
         character cgrid*10, num*3,iblks*16, fformat*10
 
@@ -99,6 +100,8 @@ c -------------- Collect all histogram from different processors
         call mpi_reduce(hist_height,sumbuf_height,num_entries,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
         call mpi_reduce(hist_momentum,sumbuf_momentum,num_entries,
+     +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+        call mpi_reduce(hist_slopes,sumbuf_slopes,num_entries,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
 
@@ -125,6 +128,8 @@ c
         path_height = path_histog(1:iblnk-1)//'/height'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
         path_momentum = path_histog(1:iblnk-1)//'/momentum'//
+     +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
+        path_slopes = path_histog(1:iblnk-1)//'/slopes'//
      +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'
 
 c ---------------- save data
@@ -184,6 +189,20 @@ c ---------------- save data
 
 
         close(903)
+
+
+        open (unit=904,file=path_slopes,
+     +  form='formatted',access='sequential')
+
+        write(904,fformat),bins(:,1)
+        write(904,fformat),bins(:,6)
+
+        do i =1,histbins+2
+           write(904,fformat),sumbuf_slopes(1:histbins+2,i)
+        end do
+
+
+        close(904)
         end if
 
         end subroutine write_histograms
@@ -281,5 +300,6 @@ c       Add the current event to the histogram
         hist_locations = 0
         hist_height = 0
         hist_momentum = 0
+        hist_slopes = 0
 
         end subroutine clean_histograms
